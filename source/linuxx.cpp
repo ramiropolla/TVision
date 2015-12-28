@@ -1,4 +1,4 @@
-/* $Id: linuxx.cpp,v 1.12 2005/03/29 22:13:30 jeremy Exp $ */
+/* $Id: linuxx.cpp,v 1.13 2005/06/06 06:49:54 jeremy Exp $ */
 /*
  * system.cc
  *
@@ -1253,7 +1253,7 @@ setupGCs(Display *disp, Window win, Font font)
 	}
 
 	/*
-	 * Allocate the 16 foreground colors.
+	 * Allocate the sixteen foreground colors.
 	 */
 	for (i = 0; i < 16; i++) {
 		if (XAllocNamedColor(x_disp, colormap, fgColor[i],
@@ -1463,7 +1463,7 @@ TScreen::TScreen()
 	XFree(sh);
 
 	/*
-	 * Setup the 128 graphics contexts we require to draw
+	 * Setup the 256 graphics contexts we require to draw
 	 * color text.
 	 */
 	setupGCs(x_disp, x_win, fid);
@@ -1733,11 +1733,11 @@ void TScreen::writeRow(int dst, ushort *src, int len)
       if (color == current_color ||
           // If printing a space character, only the background color need
           // match.
-          (code == 0x20 && (color & 0x70) == (current_color & 0x70))) {
+          (code == 0x20 && (color & 0xf0) == (current_color & 0xf0))) {
         *(chunk_p++) = code;
         src++;
       } else if (code == 0xdb &&
-                 (color & 0x0F) == ((current_color & 0x70) >> 4)) {
+                 (color & 0x0F) == ((current_color & 0xf0) >> 4)) {
         // If printing a solid block character and its foreground matches the
         // current background, print a space.
         *(chunk_p++) = ' ';
@@ -1828,6 +1828,22 @@ void TV_CDECL THWMouse::show()
 void TV_CDECL THWMouse::hide()
 {
   LOG("HIDE MOUSE\n");
+}
+
+bool TProgram::switch_screen(int to_user)
+{
+  //
+  // The X window is separate from any child application's
+  // I/O.  Therefore, nothing needs to be done in this implementation.
+  //
+  return true;
+}
+
+void TProgram::at_child_exec(bool before)
+{
+  //
+  // Nothing needs to be done.
+  //
 }
 
 #endif // __LINUX__

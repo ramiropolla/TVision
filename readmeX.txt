@@ -1,4 +1,4 @@
-$Id: readmeX.txt,v 1.5 2005/03/29 22:13:57 jeremy Exp $
+$Id: readmeX.txt,v 1.6 2005/06/06 06:52:16 jeremy Exp $
 
 TVision ported to Linux X Windows
 -----------------------------------------------------------
@@ -11,15 +11,11 @@ a "VGA" font on your X server.
 Release notes
 -----------------------------------------------------------
 
-Release JSC-1.3 notes:
+Release JSC-1.4 notes:
 
-* Incorporated Datarescue's TVision Level K, released with IDA 4.8.  With
-  this change, you must now possess the IDA SDK to build the library from
-  source.  (The TVision library now requires some routines from the IDA
-  SDK).
-
-* Added support for 16 color backgrounds.  (Previous versions only supported
-  8).
+* Fixed missing implementations of TProgram::at_child_exec() and
+  TProgram::switch_screen() that were preventing the use of the IDA
+  debugger.  Reported by Eberhard Mattes.
 
 Installation
 -----------------------------------------------------------
@@ -113,7 +109,7 @@ tvision.text.bgcolor0  - Background color 0 (black)
   =====
 
 The TVision application will use any font you specify.  For best results,
-the font you use must be fixed with and should be encoded in the IBM-PC
+the font you use must be fixed-width and should be encoded in the IBM-PC
 style (mostly for drawing line characters).  The font specified in the
 
 tvision.text.font
@@ -172,7 +168,7 @@ using the library.
   The font specified in your resource file (or the default, 'vga')
   doesn't appear to be a fixed-width font; that is, not all of the characters
   in the font occupy the same imaginary bounding box.  IDA depends on its
-  font being fixed with to ensure that items on the screen line up properly.
+  font being fixed-width to ensure that items on the screen line up properly.
 
   While running IDA with a variable-width font will not cause any serious
   errors, you will find that lines of text don't align properly, and you will
