@@ -42,16 +42,16 @@ TPalette& THistoryViewer::getPalette() const
     return palette;
 }
 
-void THistoryViewer::getText( char *dest, int item, int maxChars )
+void THistoryViewer::getText( char *dest, int item, size_t destsize )
 {
-        const char *str = historyStr( historyId, item );
-        if( str != 0 )
-                {
-                strncpy( dest, str, maxChars );
-                dest[maxChars] = '\0';
-                }
+  if ( ssize_t(destsize) > 0 )
+  {
+    const char *str = historyStr( historyId, item );
+    if( str != NULL )
+      qstrncpy( dest, str, destsize );
     else
-        *dest = EOS;
+      *dest = EOS;
+  }
 }
 
 void THistoryViewer::handleEvent( TEvent& event )
@@ -77,12 +77,12 @@ void THistoryViewer::handleEvent( TEvent& event )
 
 int THistoryViewer::historyWidth()
 {
-    int width = 0;
+    size_t width = 0;
     int count = historyCount( historyId );
     for( int i = 0; i < count; i++ )
         {
-        int T = strlen( historyStr( historyId, i ) );
-        width = max( width, T );
+        size_t T = strlen( historyStr( historyId, i ) );
+        width = qmax( width, T );
         }
     return width;
 }

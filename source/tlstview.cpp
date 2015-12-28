@@ -36,7 +36,9 @@ TListViewer::TListViewer( const TRect& bounds,
     numCols( aNumCols ),
     topItem( 0 ),
     focused( 0 ),
-    range( 0 )
+    range( 0 ),
+    first_selected( -1 ),
+    last_selected( -1 )
 {
     int arStep, pgStep;
 
@@ -73,29 +75,20 @@ void TListViewer::changeBounds( const TRect& bounds )
 
 void TListViewer::draw()
 {
- int i, j, item;
- ushort normalColor, selectedColor, focusedColor, color;
- short colWidth, curCol, indent;
- TDrawBuffer b;
- uchar scOff;
+    int i, j, item;
+    ushort normalColor, selectedColor, color;
+    short colWidth, curCol, indent;
+    TDrawBuffer b;
+    uchar scOff;
+    bool  on_front;
 
-    if( (state&(sfSelected | sfActive)) == (sfSelected | sfActive))
-        {
-        normalColor = getColor(1);
-        focusedColor = getColor(3);
-        selectedColor = getColor(4);
-        }
-    else
-        {
-        normalColor = getColor(2);
-        selectedColor = getColor(4);
-        focusedColor = 0; // ONLY to disable warning -- really not used
-        }
+    on_front = (state&(sfSelected|sfActive)) == (sfSelected|sfActive);
+    normalColor = getColor(on_front ? 1 : 2);
+    selectedColor = getColor(4);
 
+    indent = 0;
     if( hScrollBar != 0 )
         indent = hScrollBar->value;
-    else
-        indent = 0;
 
     colWidth = size.x / numCols + 1;
     for( i = 0; i < size.y; i++ )
@@ -104,15 +97,14 @@ void TListViewer::draw()
             {
             item =  j * size.y + i + topItem;
             curCol = j * colWidth;
-            if( (state & (sfSelected | sfActive)) == (sfSelected | sfActive) &&
-                focused == item &&
-                range > 0)
+
+            if( focused == item && on_front && range > 0 )
                 {
-                color = focusedColor;
+                color = getColor(3);
                 setCursor( curCol + 1, i );
                 scOff = 0;
                 }
-            else if( item < range && isSelected(item) )
+            else if( item < range && isItemSelected(item) )
                 {
                 color = selectedColor;
                 scOff = 2;
@@ -127,7 +119,7 @@ void TListViewer::draw()
             if( item < range )
                 {
                 char text[MAXSTR];
-                getText( text, item, colWidth + indent );
+                getText( text, item, qmin(colWidth + indent, sizeof(text)) );
                 char buf[MAXSTR];
                 buf[0] = '\0';
                 if ( strlen(text) > (size_t)indent ) {
@@ -144,7 +136,7 @@ void TListViewer::draw()
             else if( i == 0 && j == 0 )
                 b.moveStr( curCol+1, "<empty>", getColor(1) );
 
-            b.moveChar( curCol+colWidth-1, 179, getColor(5), 1 );
+            b.moveChar( curCol+colWidth-1, char(179), getColor(5), 1 );
             }
         writeLine( 0, i, size.x, 1, b );
         }
@@ -187,14 +179,24 @@ TPalette& TListViewer::getPalette() const
     return palette;
 }
 
-void TListViewer::getText( char *dest, int, int )
+void TListViewer::getText( char *dest, int, size_t destsize )
 {
+  if ( ssize_t(destsize) > 0 )
     *dest = EOS;
 }
 
 Boolean TListViewer::isSelected( int item )
 {
     return Boolean( item == focused );
+}
+
+bool TListViewer::isItemSelected ( int item )
+{
+    if ( (first_selected | last_selected) < 0 ) return isSelected(item);
+
+    if ( first_selected > last_selected )
+      return Boolean( last_selected <= item && item <= first_selected );
+    return Boolean( first_selected <= item && item <= last_selected );
 }
 
 void TListViewer::handleEvent( TEvent& event )
@@ -209,6 +211,7 @@ void TListViewer::handleEvent( TEvent& event )
 
     if( event.what == evMouseDown )
         {
+        remove_selection();
         colWidth = size.x / numCols + 1;
         oldItem =  focused;
         mouse = makeLocal( event.mouse.where );
@@ -275,6 +278,7 @@ void TListViewer::handleEvent( TEvent& event )
             {
             selectItem( focused );
             newItem = focused;
+            first_selected = -1;  // remove multi-selection
             }
         else
             {
@@ -310,14 +314,40 @@ void TListViewer::handleEvent( TEvent& event )
                 case kbEnd:
                     newItem = topItem + (size.y * numCols) - 1;
                     break;
+                case kbCtrlEnd:
                 case kbCtrlPgDn:
                     newItem = range - 1;
                     break;
+                case kbCtrlHome:
                 case kbCtrlPgUp:
                     newItem = 0;
                     break;
                 default:
+                    remove_selection();
                     return;
+                }
+            // multi-selection
+            if ( last_selected >= 0 )
+                {
+                if (event.keyDown.controlKeyState & kbShift)
+                    {
+                    if ( newItem < 0 )
+                        newItem = 0;
+                    else if ( range > 0 && newItem >= range )
+                        newItem = range-1;
+                    if ( focused < 0 )
+                        focused = 0;
+                    else if ( range >= 0 && focused >= range )
+                        focused = range-1;
+
+                    last_selected = newItem;
+                    if ( first_selected < 0 )
+                        first_selected = focused;
+                    if ( first_selected == last_selected )
+                        first_selected = -1;
+                    }
+                    else  // unshifted go
+                        first_selected = -1;  // remove selection
                 }
             }
         focusItemNum(newItem);

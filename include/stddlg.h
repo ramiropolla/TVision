@@ -15,35 +15,15 @@
 #pragma warn -hid
 #endif
 
-#if !defined( __FILE_CMDS )
-#define __FILE_CMDS
-
-const int
-
-//  Commands
-
-    cmFileOpen    = 1001,   // Returned from TFileDialog when Open pressed
-    cmFileReplace = 1002,   // Returned from TFileDialog when Replace pressed
-    cmFileClear   = 1003,   // Returned from TFileDialog when Clear pressed
-    cmFileInit    = 1004,   // Used by TFileDialog internally
-    cmChangeDir   = 1005,   // Used by TChDirDialog internally
-    cmRevert      = 1006,   // Used by TChDirDialog internally
-
-//  Messages
-
-    cmFileFocused = 102,    // A new file was focused in the TFileList
-    cmFileDoubleClicked     // A file was selected in the TFileList
-            = 103;
-
-#endif  // __FILE_CMDS
+#include <cm_codes.h>
 
 #if defined( Uses_TSearchRec ) && !defined( __TSearchRec )
 #define __TSearchRec
 
-#include <tvdir.h>
+#include <prodir.h>
 
-#ifndef __DOS_H__
-struct  ftime   {
+struct dos_ftime
+{
     unsigned    ft_tsec  : 5;   /* Two second interval */
     unsigned    ft_min   : 6;   /* Minutes */
     unsigned    ft_hour  : 5;   /* Hours */
@@ -51,7 +31,6 @@ struct  ftime   {
     unsigned    ft_month : 4;   /* Months */
     unsigned    ft_year  : 7;   /* Year */
 };
-#endif
 
 struct TSearchRec
 {
@@ -279,14 +258,14 @@ public:
     ~TFileList();
 
     virtual void focusItem( int item );
-    virtual void getText( char *dest, int item, int maxLen );
+    virtual void getText( char *dest, int item, size_t destsize );
     virtual void handleEvent( TEvent& event );
     virtual void newList( TFileCollection *aList );
     void readDirectory( const char *dir, const char *wildCard );
     void readDirectory( const char *wildCard );
 
     virtual size_t dataSize();
-    virtual void getData( void *rec );
+    virtual void getData( void *rec, size_t recsize );
     virtual void setData( void *rec );
 
     TFileCollection *list();
@@ -408,7 +387,7 @@ const int
                                    // WildCard by using SetData or store
                                    // the dialog on a stream.
 
-#include <tvdir.h>
+#include <prodir.h>
 
 class TEvent;
 class TFileInputLine;
@@ -423,8 +402,8 @@ public:
                  const char *inputName, ushort aOptions, uchar histId );
     ~TFileDialog();
 
-    virtual void getData( void *rec );
-    void getFileName( char *s );
+    virtual void getData( void *rec, size_t recsize );
+    void getFileName( char *buf, size_t bufsize );
     virtual void handleEvent( TEvent& event );
     virtual void setData( void *rec );
     virtual Boolean valid( ushort command );
@@ -433,7 +412,7 @@ public:
     TFileInputLine *fileName;
     TFileList *fileList;
     char wildCard[MAXPATH];
-    const char *directory;
+    char *directory;
 
 private:
 
@@ -601,7 +580,7 @@ inline TDirEntry *TDirCollection::lastThat( ccTestFunc func, void *arg )
 #if defined( Uses_TDirListBox ) && !defined( __TDirListBox )
 #define __TDirListBox
 
-#include <tvdir.h>
+#include <prodir.h>
 
 class TRect;
 class TScrollBar;
@@ -616,7 +595,7 @@ public:
     TDirListBox( const TRect& bounds, TScrollBar *aScrollBar );
     ~TDirListBox();
 
-    virtual void getText( char *, int, int );
+    virtual void getText( char *dest, int item, size_t destsize );
     virtual void handleEvent( TEvent& );
     virtual Boolean isSelected( int );
     /**
@@ -718,7 +697,7 @@ public:
 
     TChDirDialog( ushort aOptions, ushort histId );
     virtual size_t dataSize();
-    virtual void getData( void *rec );
+    virtual void getData( void *rec, size_t recsize );
     virtual void handleEvent( TEvent& );
     virtual void setData( void *rec );
     virtual Boolean valid( ushort );

@@ -21,12 +21,12 @@
 #define Uses_ipstream
 #define Uses_TThreaded
 #include <tv.h>
-#include <tvdir.h>
+#include <prodir.h>
 
 #include <stdio.h>
 #include <sys/stat.h>
 
-#if __FAT__
+#ifdef __FAT__
 Boolean driveValid( char drive )
 {
   drive = toupper(drive);
@@ -47,20 +47,26 @@ Boolean driveValid( char drive )
 
 Boolean isDir( const char *str )
 {
-	/* SS: all changed */
-	struct stat s;
-
-	if (stat(str, &s) == 0 && S_ISDIR(s.st_mode)) return True;
-	return False;
+#ifdef __NT__
+  DWORD a = GetFileAttributes(str);
+  return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0
+        ? True
+        : False;
+#else
+  struct stat s;
+  return stat(str, &s) == 0 && S_ISDIR(s.st_mode)
+        ? True
+        : False;
+#endif
 }
 
 Boolean pathValid( const char *path )
 {
     char expPath[MAXPATH];
-    strcpy( expPath, path );
-    fexpand( expPath );
+    qstrncpy( expPath, path, sizeof(expPath) );
+    fexpand( expPath, sizeof(expPath) );
     int len = strlen(expPath);
-#if __FAT__
+#ifdef __FAT__
     if( len <= 3 )
         return driveValid(expPath[0]);
 #endif
@@ -72,11 +78,11 @@ Boolean pathValid( const char *path )
 
 Boolean validFileName( const char *fileName )
 {
-#if __FAT__
+#ifdef __FAT__
 #ifdef __MSDOS__
-    static const char * const illegalChars = ";,=+<>|\"[] " SDIRCHAR;
+    static const char illegalChars[] = ";,=+<>|\"[] " SDIRCHAR;
 #else
-    static const char * const illegalChars = "<>|\"" SDIRCHAR;
+    static const char illegalChars[] = "<>|\"" SDIRCHAR;
 #endif
 
     char path[MAXPATH];
@@ -86,11 +92,11 @@ Boolean validFileName( const char *fileName )
 
     ext[1] = 0; // V.Timonin
     fnsplit( fileName, path, dir, name, ext );
-    strcat( path, dir );
+    qstrncat( path, dir, sizeof(path) );
     if( *dir != EOS && !pathValid( path ) )
         return False;
-    if( strpbrk( name, illegalChars ) != 0 ||
-        strpbrk( ext+1, illegalChars) != 0 ||
+    if( strpbrk( name, illegalChars ) != NULL ||
+        strpbrk( ext+1, illegalChars) != NULL ||
         strchr( ext+1, '.' ) != 0
       )
         return False;
@@ -122,15 +128,18 @@ Boolean validFileName( const char *fileName )
 #endif
 }
 
-void getCurDir( char *dir )
+void getCurDir( char *dir, size_t dirsize )
 {
-    getcwd(dir,MAXPATH);
-    int len = strlen(dir);
-    if ( len > 3 && len < MAXPATH - 1 && dir[len-1] != DIRCHAR )
+  if ( ssize_t(dirsize) > 0 )
+  {
+    getcwd(dir, dirsize);
+    size_t len = strlen(dir);
+    if ( len > 3 && len < dirsize - 1 && dir[len-1] != DIRCHAR )
     {
       dir[len] = DIRCHAR;
       dir[len + 1] = '\0';
     }
+  }
 }
 
 Boolean isWild( const char *f )

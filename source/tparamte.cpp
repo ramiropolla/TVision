@@ -35,12 +35,15 @@ size_t TParamText::dataSize()
     return paramCount * sizeof(long);
 }
 
-void TParamText::getText( char *s )
+void TParamText::getText( char *str, size_t strsize )
 {
+  if ( ssize_t(strsize) > 0 )
+  {
     if( text == 0 )
-        *s = EOS;
+      *str = EOS;
     else
-        vsprintf( s, text, (va_list)paramList );
+      qvsnprintf( str, strsize, text, (va_list)paramList );
+  }
 }
 
 void TParamText::setData( void *rec )

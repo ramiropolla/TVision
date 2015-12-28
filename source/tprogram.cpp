@@ -255,80 +255,35 @@ void TProgram::getEvent(TEvent& event)
           idle();
         }
 #elif defined(__NT__)
-        static HWND h = NULL;
-        static int hinited = 0;
-        if ( !hinited ) {
-          HMODULE hk;
-          assert((hk = GetModuleHandleA("kernel32")) != 0);
-          if(GetProcAddress(hk, "Borland32")) --hinited;  // -1 (RTM - dos)
-          else if( getenv("IDA_NOWIN") ) ++hinited;       // +1
-        }
-        if ( !hinited )                // find our window handle
+        DWORD c;
+#define hCin  TThreads::chandle[cnInput]
+        if (
+               TThreads::ispending()
+            || TThreads::macro_playing
+            || (GetNumberOfConsoleInputEvents(hCin, &c) && c)
+            || (   (c = TEventQueue::lastMouse.buttons != 0 ?
+                        TEventQueue::autoDelay : event_delay) != 0
+                && WaitForSingleObject(hCin, c) == WAIT_OBJECT_0))
+#undef hCin
         {
-          ++hinited;  // +1
-          OSVERSIONINFO osv;
-          osv.dwOSVersionInfoSize = sizeof(osv);
-          assert(GetVersionEx(&osv) != 0);
-          if ( osv.dwPlatformId == VER_PLATFORM_WIN32_WINDOWS ) // WIN95
-          {
-            char old_title[MAXSTR];
-            char temp_title[MAXSTR];
-            GetConsoleTitle(old_title, sizeof(old_title));
-            sprintf(temp_title, "IDA - %lX", GetCurrentProcessId());
-            SetConsoleTitle(temp_title);
-            time_t start = time(0);
-            while ( (h=FindWindowA(NULL, temp_title)) == NULL
-                 && time(0)-start < 2 )
-            {
-            }
-            MSG m;
-            SetConsoleTitle(old_title);
-            PeekMessage(&m, NULL, 0, 0, PM_NOREMOVE);
-          }
-        }
-//        fprintf(stderr, "active window=%x\n", GetForegroundWindow());
-        DWORD rc;
-        HWND hf = NULL;
-
-        if(hinited > 0) hf = GetForegroundWindow();
-        if ( h && IsIconic(h) && h != hf )
-        {
-          Sleep(0);
-          rc = WAIT_TIMEOUT;
+          event.getMouseEvent();
+          if ( event.what == evNothing )
+            event.getKeyEvent();
         }
         else
         {
-          int delay = TEventQueue::lastMouse.buttons != 0
-                        ? TEventQueue::autoDelay
-                        : event_delay;
-          int checkinp = !h
-                       || h == hf
-                       || delay != 0;
-          rc = (TThreads::ispending() || TThreads::macro_playing)
-                ? WAIT_OBJECT_0
-                : checkinp
-                        ? WaitForSingleObject(TThreads::chandle[0], delay)
-                        : WAIT_TIMEOUT;
-//          static nnnn = 0;
-//          fprintf(stderr, "active=%x h=%x delay=%d checkinp=%d rc=%d %d\n", GetForegroundWindow(), h, delay, checkinp, rc, nnnn++);
-        }
-        TThreads::macro_playing = 0;
-        switch ( rc ) {
-          case WAIT_TIMEOUT:                    // call idle()
-            event.what = evNothing;
-            if ( TEventQueue::lastMouse.buttons != 0 )
-              event.getMouseEvent();
-            if ( event.what == evNothing ) idle();
-            break;
-          default:
-          case WAIT_OBJECT_0:                   // get keyboard event
+          event.what = evNothing;
+          if ( TEventQueue::lastMouse.buttons != 0 )
             event.getMouseEvent();
-            if ( event.what == evNothing ) {
-              event.getKeyEvent();
-              if ( event.what == evNothing ) idle();
-            }
-            break;
         }
+
+        extern int changed_nt_console_size;
+        if ( changed_nt_console_size != 0 )
+        {
+          TProgram::application->setScreenMode(changed_nt_console_size);
+          changed_nt_console_size = 0;
+        }
+        if ( event.what == evNothing ) idle();
 #elif defined(__LINUX__)
         TScreen::getEvent(event);
         if ( event.what == evNothing )

@@ -44,9 +44,9 @@ TPalette& THistoryWindow::getPalette() const
     return palette;
 }
 
-void THistoryWindow::getSelection( char *dest )
+void THistoryWindow::getSelection( char *dest, size_t destsize )
 {
-    viewer->getText( dest, viewer->focused, maxViewWidth-1 );
+    viewer->getText( dest, viewer->focused, destsize );
 }
 
 TListViewer *THistoryWindow::initViewer( TRect r, TWindow * win, ushort historyId )

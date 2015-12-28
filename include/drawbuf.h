@@ -39,21 +39,21 @@ protected:
 };
 
 #ifdef __MACOSX__
-#define loByte(w)    (((uchar *)&w)[1])
-#define hiByte(w)    (((uchar *)&w)[0])
+#define loByte(w)    (((uchar *)(&w))[1])
+#define hiByte(w)    (((uchar *)(&w))[0])
 #else
-#define loByte(w)    (((uchar *)&w)[0])
-#define hiByte(w)    (((uchar *)&w)[1])
+#define loByte(w)    (((uchar *)(&w))[0])
+#define hiByte(w)    (((uchar *)(&w))[1])
 #endif
 
 inline void TDrawBuffer::putAttribute( ushort indent, ushort attr )
 {
-    hiByte(data[indent]) = uchar(attr);
+    hiByte(data[indent]) = (uchar)attr;
 }
 
 inline void TDrawBuffer::putChar( ushort indent, ushort c )
 {
-    loByte(data[indent]) = uchar(c);
+    loByte(data[indent]) = (uchar)c;
 }
 
 #endif  // Uses_TDrawBuffer

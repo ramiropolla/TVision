@@ -83,8 +83,8 @@ void TFrame::draw()
         const char *title = ((TWindow *)owner)->getTitle(l);
         if( title != 0 )
             {
-            l = min( cstrlen(title), width - 10 );
-            l = max( l, 0 );
+            l = qmin( cstrlen(title), width - 10 );
+            l = qmax( l, 0 );
             i = (width - l) >> 1;
             b.putChar( i-1, ' ' );
             b.moveBuf( i, title, cTitle, l );

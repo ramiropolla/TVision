@@ -24,6 +24,9 @@
 #define Uses_TReplaceDialogRec
 #define Uses_opstream
 #define Uses_ipstream
+#ifdef __NT__
+#define Uses_TThreaded
+#endif
 #include <tv.h>
 
 inline bool isWordChar( int ch )
@@ -159,8 +162,8 @@ void TEditor::shutDown()
 void TEditor::changeBounds( const TRect& bounds )
 {
     setBounds(bounds);
-    delta.x = max(0, min(delta.x, limit.x - size.x));
-    delta.y = max(0, min(delta.y, limit.y - size.y));
+    delta.x = qmax(0, qmin(delta.x, limit.x - size.x));
+    delta.y = qmax(0, qmin(delta.y, limit.y - size.y));
     update(ufView);
 }
 
@@ -195,12 +198,21 @@ size_t TEditor::charPtr( size_t p, int target )
 Boolean TEditor::clipCopy()
 {
     Boolean res = False;
+#ifdef __NT__
+    if ( TThreads::clipboard_put(buffer, selStart, selEnd) )
+        {
+        selecting = False;
+        update(ufUpdate);
+        res = True;
+        }
+#else
     if( (clipboard != 0) && (clipboard != this) )
         {
         res = clipboard->insertFrom(this);
         selecting = False;
         update(ufUpdate);
         }
+#endif
     return res;
 }
 
@@ -212,8 +224,18 @@ void TEditor::clipCut()
 
 void TEditor::clipPaste()
 {
+#ifdef __NT__
+    size_t  size = MAX_GET_FROM_CLIP;
+    char    *data = TThreads::clipboard_get(size, false);
+    if ( data != NULL)
+        {
+        insertBuffer( data, 0, size, False, False );
+        free(data);
+        }
+#else
     if( (clipboard != 0) && (clipboard != this) )
         insertFrom(clipboard);
+#endif
 }
 
 void TEditor::convertEvent( TEvent& event )
@@ -362,7 +384,7 @@ void TEditor::find()
     TFindDialogRec findRec( findStr, editorFlags );
     if( editorDialog( edFind, &findRec ) != cmCancel )
         {
-        strcpy( findStr, findRec.find );
+        qstrncpy( findStr, findRec.find, sizeof(findStr) );
         editorFlags = findRec.options & ~efDoReplace;
         doSearchReplace();
         }
@@ -371,8 +393,8 @@ void TEditor::find()
 size_t TEditor::getMousePtr( TPoint m )
 {
     TPoint mouse = makeLocal( m );
-    mouse.x = max(0, min(mouse.x, size.x - 1));
-    mouse.y = max(0, min(mouse.y, size.y - 1));
+    mouse.x = qmax(0, qmin(mouse.x, size.x - 1));
+    mouse.y = qmax(0, qmin(mouse.y, size.y - 1));
     return charPtr(lineMove(drawPtr, mouse.y + delta.y - drawLine),
         mouse.x + delta.x);
 }
@@ -398,7 +420,7 @@ void TEditor::checkScrollBar( const TEvent& event,
 void TEditor::handleEvent( TEvent& event )
 {
     TView::handleEvent( event );
-    convertEvent( event );
+//    convertEvent( event );
     Boolean centerCursor = Boolean(!cursorVisible());
     uchar selectMode = 0;
 

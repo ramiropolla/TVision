@@ -215,7 +215,7 @@ Boolean TEditor::insertBuffer( char *p,
         insCount += length;
         }
     limit.y += lines - selLines;
-    delta.y = max(0, min(delta.y, limit.y - size.y));
+    delta.y = qmax(0, qmin(delta.y, limit.y - size.y));
     if( isClipboard() == False )
         modified = True;
     setBufSize(bufLen + delCount);
@@ -320,8 +320,8 @@ void TEditor::replace()
     TReplaceDialogRec replaceRec( findStr, replaceStr, editorFlags );
     if( editorDialog( edReplace, &replaceRec ) != cmCancel )
         {
-        strcpy( findStr, replaceRec.find );
-        strcpy( replaceStr, replaceRec.replace );
+        qstrncpy( findStr, replaceRec.find, sizeof(findStr) );
+        qstrncpy( replaceStr, replaceRec.replace, sizeof(replaceStr) );
         editorFlags = replaceRec.options | efDoReplace;
         doSearchReplace();
         }
@@ -330,8 +330,8 @@ void TEditor::replace()
 
 void TEditor::scrollTo( int x, int y )
 {
-    x = max(0, min(x, limit.x - size.x));
-    y = max(0, min(y, limit.y - size.y));
+    x = qmax(0, qmin(x, limit.x - size.x));
+    y = qmax(0, qmin(y, limit.y - size.y));
     if( x != delta.x || y != delta.y )
         {
         delta.x = x;
@@ -519,8 +519,8 @@ void TEditor::trackCursor( Boolean center )
     if( center == True )
         scrollTo( curPos.x - size.x + 1, curPos.y - size.y / 2);
     else
-        scrollTo( max(curPos.x - size.x + 1, min(delta.x, curPos.x)),
-                  max(curPos.y - size.y + 1, min(delta.y, curPos.y)));
+        scrollTo( qmax(curPos.x - size.x + 1, qmin(delta.x, curPos.x)),
+                  qmax(curPos.y - size.y + 1, qmin(delta.y, curPos.y)));
 }
 
 void TEditor::undo()

@@ -37,7 +37,7 @@ static TRect getRect( const TRect& bounds, TMenu *aMenu )
                 else
                     if( p->param != 0 )
                         l += cstrlen(p->param) + 2;
-                w = max( l, w );
+                w = qmax( l, w );
                 }
             h++;
             }

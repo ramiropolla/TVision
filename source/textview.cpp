@@ -50,7 +50,7 @@ TTerminal::TTerminal( const TRect& bounds,
     queBack( 0 )
 {
     growMode = gfGrowHiX + gfGrowHiY;
-    bufSize = min( 32000U, aBufSize );
+    bufSize = qmin( 32000U, aBufSize );
     buffer = new char[ bufSize ];
     setLimit( 0, 1 );
     setCursor( 0, 0 );
@@ -116,12 +116,12 @@ void TTerminal::draw()
         begLine = prevLines(endLine, 1);
         if (endLine >= begLine) {
           int T = int( endLine - begLine );
-          T = min(T,sizeof(s)-2); // bugfix JS 26.11.94
+          T = qmin(T, sizeof(s)-2); // bugfix JS 26.11.94
           memcpy( s, &buffer[begLine], T );
           s[T] = EOS;
         } else {
-          int T = int( bufSize - begLine);
-          if (T>(int)sizeof(s)-2) {         // bugfix JS 26.11.94
+          ssize_t T = bufSize - begLine;
+          if ( T > (ssize_t)sizeof(s)-2) {         // bugfix JS 26.11.94
             memcpy( s, &buffer[begLine], sizeof(s)-2 );
             s[sizeof(s)-2] = EOS;
           } else {
@@ -138,7 +138,7 @@ void TTerminal::draw()
         if( delta.x >= (int)strlen(s) )
             *s = EOS;
         else if ( delta.x != 0 )
-            strcpy( s, &s[delta.x] );
+            qstrncpy( s, &s[delta.x], sizeof(s) );
 
         s[maxViewWidth-1] = EOS;
         writeStr( 0, i, s, 1 );

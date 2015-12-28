@@ -34,10 +34,31 @@
 #include <tv.h>
 #include "tvhelp.h"
 #include "util.h"
-
+#include <limits.h>
 #include <sys/stat.h>
 
+#include <pro.h>
+
+int tv_helpIndex;
+int tv_idcIndex;
+int tv_helponhelp;
+
 // THelpViewer
+
+static ushort curtop;           // current topic
+static helppos_t olds[20];      // array of old topics
+static int ntopics = 0;         // number of old topics
+
+static void save_topic(ushort curtop,ushort selected,int x,int y) {
+  if ( ntopics == qnumber(olds) ) {
+    memmove(olds,&olds[1],sizeof(olds)-sizeof(olds[0]));
+    ntopics--;
+  }
+  olds[ntopics  ].topic = curtop;
+  olds[ntopics  ].selected = selected;
+  olds[ntopics  ].delta.x = x;
+  olds[ntopics++].delta.y = y;
+}
 
 THelpViewer::THelpViewer( const TRect& bounds, TScrollBar* aHScrollBar,
     TScrollBar* aVScrollBar, THelpFile *aHelpFile, ushort context )
@@ -50,12 +71,12 @@ THelpViewer::THelpViewer( const TRect& bounds, TScrollBar* aHScrollBar,
     topic->setWidth(size.x);
     setLimit(78, topic->numLines());
     selected = 1;
-
-
+    curtop = context;
 }
 
 THelpViewer::~THelpViewer()
 {
+    save_topic(curtop,selected,delta.x,delta.y);
     delete hFile;
     delete topic;
 }
@@ -87,23 +108,33 @@ void THelpViewer::draw()
     keyCount = 0;
     keyPoint.x = 0;
     keyPoint.y = 0;
-    topic->setWidth(size.x);
-    if (nxrefs > 0)
-        {
-        do
-            {
-            topic->getCrossRef(keyCount++, keyPoint, keyLength, keyRef);
-            } while ( (keyCount <= nxrefs) && (keyPoint.y <= delta.y));
-        }
+//    topic->setWidth(size.x);
+    if (nxrefs > 0) {
+      do
+        topic->getCrossRef(keyCount++, keyPoint, keyLength, keyRef);
+      while ( (keyCount <= nxrefs) && (keyPoint.y <= delta.y) );
+      if ( selected < keyCount ) {
+        selected = keyCount;
+      } else {
+        TPoint keyP = keyPoint;
+        uchar keyL;
+        int keyR;
+        int maxk = keyCount;                    // number of last ref
+        int maxy = delta.y + size.y;
+        while ( (maxk < nxrefs) && (keyP.y <= maxy) )     // ig 25.02.94
+          topic->getCrossRef(maxk++, keyP, keyL, keyR);
+        if ( keyP.y > maxy ) maxk--;
+        if ( selected > maxk ) selected = maxk;
+      }
+    }
     for (i = 1; i <= size.y; ++i)
         {
         b.moveChar(0, ' ', normal, size.x);
         topic->getLine(i + delta.y, line, sizeof(line));
-        if (strlen(line) > (size_t)delta.x)
+        if (strlen(line) > delta.x)
             {
             bufPtr = line + delta.x;
-            strncpy(buffer, bufPtr, size.x);
-            buffer[size.x] = 0;
+            qstrncpy(buffer, bufPtr, qmin(size.x+1, sizeof(buffer)));
             b.moveStr(0, buffer, normal);
             }
         else
@@ -156,18 +187,18 @@ void THelpViewer::makeSelectVisible( int selected, TPoint& keyPoint,
          scrollTo(d.x, d.y);
 }
 
-void THelpViewer::switchToTopic( int keyRef )
+void THelpViewer::switchToTopic( int keyRef, const TPoint &d, int s )
 {
     if (topic != 0)
       delete topic;
-
+    curtop = keyRef;
     topic = hFile->getTopic(keyRef);
     topic->setWidth(size.x);
-    scrollTo(0, 0);
-
-
+    scrollTo(d.x, d.y);
+    scrollDraw();
+    delta = d;
     setLimit(limit.x, topic->numLines());
-    selected = 1;
+    selected = s;
     drawView();
 }
 
@@ -201,30 +232,26 @@ void THelpViewer::handleEvent( TEvent& event )
                     if ( topic->getNumCrossRefs() != 0 )
                         makeSelectVisible(selected-1,keyPoint,keyLength,keyRef);
                     break;
-
-
-
-
-
-
-
+                case kbF1:
+HHelp:
+                    keyRef = tv_helponhelp;
+                    goto SwitchSaving;
+                case kbShiftF1:
+                    keyRef = tv_helpIndex;
+                    goto SwitchSaving;
+                case kbCtrlF1:
+                    keyRef = tv_idcIndex;
+                    goto SwitchSaving;
                 case kbEnter:
                     if (selected <= topic->getNumCrossRefs()) {
                       topic->getCrossRef(selected-1, keyPoint, keyLength, keyRef);
-
-
-
-
-
-
-
-
-
-
-
-
-                        switchToTopic(keyRef);
-
+SwitchSaving:
+                      if ( curtop != keyRef ) {
+                        save_topic(curtop,selected,delta.x,delta.y);
+                        TPoint z;
+                        z.x = z.y = 0;
+                        switchToTopic(keyRef,z,1);
+                      }
                     }
                     break;
                 case kbEsc:
@@ -232,19 +259,20 @@ void THelpViewer::handleEvent( TEvent& event )
                     event.message.command = cmClose;
                     putEvent(event);
                     break;
-
-
-
-
-
-
-
-
-
-
-
+                case kbAltF1:
+                case kbBack:
+                    if ( ntopics > 0 ) {
+                      ntopics--;
+                      switchToTopic(olds[ntopics].topic,olds[ntopics].delta,olds[ntopics].selected);
+                    }
+                    break;
+                case kbF5:
+                    event.what = evCommand;
+                    event.message.command = cmZoom;
+                    putEvent(event);
+                    break;
                 default:
-                    return;
+                    if ( keyRef != tv_helpIndex ) return;
                 }
             drawView();
             clearEvent(event);
@@ -266,13 +294,13 @@ void THelpViewer::handleEvent( TEvent& event )
                   (mouse.x < keyPoint.x + keyLength)));
             selected = keyCount;
             drawView();
-            if (event.mouse.eventFlags & meDoubleClick)
-                switchToTopic(keyRef);
+            if ( event.mouse.doubleClick() )
+              goto SwitchSaving;
             clearEvent(event);
             break;
 
         case evCommand:
-
+            if ( event.message.command == cmHelp ) goto HHelp;
             if ((event.message.command == cmClose) && ((owner->state & sfModal) != 0))
                 {
                 endModal(cmClose);
@@ -284,14 +312,15 @@ void THelpViewer::handleEvent( TEvent& event )
 
 // THelpWindow
 
-THelpWindow::THelpWindow( THelpFile *hFile, ushort context ):
-       TWindow( TRect(0,0,50,18), "Help", wnNoNumber ),
+THelpWindow::THelpWindow( TRect &b, THelpFile *hFile, ushort context ):
+       TWindow( b, "Backspace=last Shift-F1=Index Esc=return", wnNoNumber ),
        TWindowInit(THelpWindow::initFrame)
 {
-    TRect r(0, 0, 50, 18);
-    options = (options | ofCentered);
-    r.grow(-2,-1);
-    insert(new THelpViewer (r,
+
+//    options = (options | ofCentered);
+    b.grow(-2,-1);
+    b.move(-b.a.x+1,-b.a.y+1);
+    insert(new THelpViewer (b,
       standardScrollBar(sbHorizontal | sbHandleKeyboard),
       standardScrollBar(sbVertical | sbHandleKeyboard), hFile, context));
 }

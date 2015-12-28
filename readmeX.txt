@@ -1,30 +1,40 @@
-$Id: readmeX.txt,v 1.4 2004/08/28 23:02:18 jeremy Exp $
+$Id: readmeX.txt,v 1.5 2005/03/29 22:13:57 jeremy Exp $
 
 TVision ported to Linux X Windows
 -----------------------------------------------------------
 
-This distribution includes a module which offers support for running
-TVision applications natively under X11.  To use this version of the
-library you must build the 'libtvisionx.so' target, install it
-as 'libtvision.so' with your application, and install a "VGA" font on your
-X server.
+This package is a module which offers support for running IDA natively under
+X11.  To use this version of the library you must build the library, install
+it as 'libtvision.so' in your IDA application directory, and finally, install
+a "VGA" font on your X server.
 
 Release notes
 -----------------------------------------------------------
 
-Release JSC-1.2 notes:
+Release JSC-1.3 notes:
 
-* Added support for numeric keypad 'multiply' key (*); it was previously
-  missing and not translated.  Also fixed translation of Tab, Enter,
-  Backspace, and Escape keys that was botched with the introduction of
-  scancode translation in release 1.1.
+* Incorporated Datarescue's TVision Level K, released with IDA 4.8.  With
+  this change, you must now possess the IDA SDK to build the library from
+  source.  (The TVision library now requires some routines from the IDA
+  SDK).
+
+* Added support for 16 color backgrounds.  (Previous versions only supported
+  8).
 
 Installation
 -----------------------------------------------------------
 
-To build, run 'make libtvisionx.so' in the source/ directory.
+To build this library you must first obtain and unpack the IDA SDK.  Once
+you have unpacked the SDK, run 'make IDA=<your-sdk-dir>/' in
+the source/ directory, where <your-sdk-dir> is a relative or absolute path
+to the unpacked SDK.  Don't forget the trailing slash.
 
-Install the 'libtvisionx.so' file as 'libtvision.so' with your application.
+When the build process has completed, you will find two shared libraries in
+in the 'bin' directory of your IDA SDK distribution:  A 'libtvision.so' file
+(xterm mode library) and a 'libtvisionx.so' file (native X11 library).  To use
+the native X11 library copy it to your IDA application directory and rename it
+to 'libtvision.so'.  To switch back to using xterm mode just do the same with
+the built 'libtvision.so'.
 
 TVision requires an IBM-compatible PC X server font (commonly called a 'VGA'
 font around the web).  There are several freely available high-quality fonts
@@ -43,6 +53,12 @@ run 'mkfontdir' and restart your X server.
 Running
 -----------------------------------------------------------
 
+To use the library, simply run IDA as you normally would (for linux this
+is the 'idal' binary).  Since the X11 version of the library makes IDA a native
+X11 application, your 'DISPLAY' environment variable must be set to a valid
+X server specification.  (This happens automatically if you invoke IDA from
+within an existing XTerm).
+
 This X port of TVision obeys the X11 resource specification as closely as
 possible.  It will obey the following resource settings (settable in your
 .Xdefaults file):
@@ -51,12 +67,14 @@ possible.  It will obey the following resource settings (settable in your
   ======
  
 TVision applications support a text color model based on the color
-text mode of an IBM-PC VGA display card.  Under this model text can be
-displayed in any one of eight background colors and sixteen foreground colors.
+text mode of an IBM-PC VGA display card, with some additional features.
+Under this model text can be displayed in any one of sixteen background colors
+and sixteen foreground colors.
+
 The exact colors used by the application can be modified by setting the
-following resources.  The values for these colors can be specified by well
+following X resources.  The values for these colors can be specified by well
 known name (such as "blue", or "grey70") or in 24 bit hexadecimal RGB
-notation (#120ac7).
+notation (#120ac7).  The default setting for each color appears in parentheses.
 
 tvision.text.bgcolor0  - Background color 0 (black)
              bgcolor1  - Background color 1 (dark blue)
@@ -66,6 +84,14 @@ tvision.text.bgcolor0  - Background color 0 (black)
              bgcolor5  - Background color 5 (dark magenta)
              bgcolor6  - Background color 6 (brown)
              bgcolor7  - Background color 7 (dark white/grey)
+             bgcolor8  - Background color 8 (high intensity black/dark grey)
+             bgcolor9  - Background color 9 (high intensity blue)
+             bgcolor10  - Background color 10 (high intensity green)
+             bgcolor11  - Background color 11 (high intensity cyan)
+             bgcolor12  - Background color 12 (high intensity red)
+             bgcolor13  - Background color 13 (high intensity magenta)
+             bgcolor14  - Background color 14 (high intensity yellow)
+             bgcolor15  - Background color 15 (high intensity white)
              fgcolor0  - Foreground color 0 (black)
              fgcolor1  - Foreground color 1 (dark blue)
              fgcolor2  - Foreground color 2 (dark green)
@@ -122,6 +148,36 @@ tvision.text.font: vga
 tvision.geometry: 100x40
 tvision.text.bgcolor1: blue40
 tvision.text.bgcolor6: #404000
+
+Troubleshooting
+-----------------------------------------------------------
+
+This section has solutions to common errors you might encounter when
+using the library.
+
+* No DISPLAY defined.
+
+  If you see this error then your DISPLAY environment variable has not been
+  set.  IDA uses this variable to find the address of the X server to which
+  it must connect.
+
+  Normally the DISPLAY environment variable is populated automatically
+  by your shell application (such as Xterm) or by your SSH application (if
+  X11 forwarding is turned on).  The most common source of this error is
+  using SSH without turning on X11 forwarding, or a missing 'xauth' application
+  on the remote host.
+
+* Font '...' is not fixed-width.
+
+  The font specified in your resource file (or the default, 'vga')
+  doesn't appear to be a fixed-width font; that is, not all of the characters
+  in the font occupy the same imaginary bounding box.  IDA depends on its
+  font being fixed with to ensure that items on the screen line up properly.
+
+  While running IDA with a variable-width font will not cause any serious
+  errors, you will find that lines of text don't align properly, and you will
+  see strange behavior when IDA makes partial line updates (rather than
+  redrawing a full line).
 
 Enjoy!
 Jeremy Cooper <jeremy, at baymoo.org>

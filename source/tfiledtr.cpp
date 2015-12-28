@@ -24,7 +24,6 @@
 #define Uses_ipstream
 #endif
 #include <tv.h>
-#include <tvdir.h>
 
 #ifndef NO_TV_STREAMS
 #include <fstream.h>
@@ -48,8 +47,8 @@ TFileEditor::TFileEditor( const TRect& bounds,
         fileName[0] = EOS;
     else
         {
-        strcpy( fileName, aFileName );
-        fexpand( fileName );
+        qstrncpy( fileName, aFileName, sizeof(fileName) );
+        fexpand( fileName, sizeof(fileName) );
         if( isValid )
             isValid = loadFile();
         }
@@ -146,9 +145,9 @@ Boolean TFileEditor::save()
 Boolean TFileEditor::saveAs()
 {
     Boolean res = False;
-    if( editorDialog( edSaveAs, fileName ) != cmCancel )
+    if( editorDialog( edSaveAs, fileName, sizeof(fileName) ) != cmCancel )
         {
-        fexpand( fileName );
+        fexpand( fileName, sizeof(fileName) );
         message( owner, evBroadcast, cmUpdateTitle, 0 );
         res = saveFile();
         if( isClipboard() == True )
@@ -173,7 +172,7 @@ Boolean TFileEditor::saveFile()
     if( (editorFlags & efBackupFiles) != 0 )
         {
         char backupName[MAXPATH];
-#if __FAT__
+#ifdef __FAT__
         char drive[MAXDRIVE];
         char dir[MAXDIR];
         char file[MAXFILE];
@@ -181,7 +180,7 @@ Boolean TFileEditor::saveFile()
         fnsplit( fileName, drive, dir, file, ext );
         fnmerge( backupName, drive, dir, file, backupExt );
 #else
-       	sprintf(backupName, "%s%s", fileName, backupExt);
+       	qsnprintf(backupName, sizeof(backupName), "%s%s", fileName, backupExt);
 #endif
         unlink( backupName );
         rename( fileName, backupName );
@@ -265,7 +264,7 @@ Boolean TFileEditor::valid( ushort command )
             else
                 d = edSaveModify;
 
-            switch( editorDialog( d, fileName ) )
+            switch( editorDialog( d, fileName, sizeof(fileName) ) )
                 {
                 case cmYes:
                     return save();

@@ -75,7 +75,7 @@ void TChDirDialog::shutDown()
     TDialog::shutDown();
 }
 
-void TChDirDialog::getData( void * )
+void TChDirDialog::getData( void *, size_t )
 {
 }
 
@@ -90,13 +90,13 @@ void TChDirDialog::handleEvent( TEvent& event )
             switch( event.message.command )
                 {
                 case cmRevert:
-                    getCurDir( curDir );
+                    getCurDir( curDir, sizeof(curDir) );
                     break;
                 case cmChangeDir:
                     {
                     TDirEntry *p = dirList->list()->at( dirList->focused );
-                    strcpy( curDir, p->dir() );
-#if __FAT__
+                    qstrncpy( curDir, p->dir(), sizeof(curDir) );
+#ifdef __FAT__
                     if( strcmp( curDir, drivesText ) == 0 )
                         break;
                     else if( !driveValid( curDir[0] ) )
@@ -105,7 +105,7 @@ void TChDirDialog::handleEvent( TEvent& event )
 #endif
                         {
                         if( curDir[strlen(curDir)-1] != DIRCHAR )
-                            strcat( curDir, SDIRCHAR );
+                            qstrncat( curDir, SDIRCHAR, sizeof(curDir) );
                         }
                     break;
                     }
@@ -116,7 +116,7 @@ void TChDirDialog::handleEvent( TEvent& event )
             int len = strlen( curDir );
             if( len > 3 && curDir[len-1] == DIRCHAR )
                 curDir[len-1] = EOS;
-            strcpy( dirInput->data, curDir );
+            qstrncpy( dirInput->data, curDir, dirInput->dataSize() );
             dirInput->drawView();
             dirList->select();
             clearEvent( event );
@@ -135,22 +135,26 @@ void TChDirDialog::setUpDialog()
     if( dirList != 0 )
         {
         char curDir[MAXPATH];
-        getCurDir( curDir );
+        getCurDir( curDir, sizeof(curDir) );
         dirList->newDirectory( curDir );
         if( dirInput != 0 )
             {
             int len = strlen( curDir );
             if( len > 3 && curDir[len-1] == DIRCHAR )
                 curDir[len-1] = EOS;
-            strcpy( dirInput->data, curDir );
+            qstrncpy( dirInput->data, curDir, dirInput->dataSize() );
             dirInput->drawView();
             }
         }
 }
 
+#ifdef _MSC_VER
+inline int setdisk(int disk) { return _chdrive(disk); }
+#endif
+
 static int changeDir( const char *path )
 {
-#if __FAT__
+#ifdef __FAT__
     if( path[1] == ':' )
         setdisk( toupper(path[0]) - 'A' );
 #endif
@@ -163,10 +167,10 @@ Boolean TChDirDialog::valid( ushort command )
         return True;
 
     char path[MAXPATH];
-    strcpy( path, dirInput->data );
-    fexpand( path );
+    qstrncpy( path, dirInput->data, sizeof(path) );
+    fexpand( path, sizeof(path) );
 
-    int len = strlen( path );
+    size_t len = strlen( path );
     if( len > 3 && path[len-1] == DIRCHAR )
         path[len-1] = EOS;
 

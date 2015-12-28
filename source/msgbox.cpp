@@ -30,7 +30,17 @@
 
 #include <stdio.h>
 
-#define qvsnprintf vsnprintf
+#if defined(__IDA__) && !defined(__MSDOS__)
+#define __NOT_ONLY_PRO_FUNCS__
+#include <pro.h>
+#else
+#include <string.h>
+// if the target system doesn't have snprintf(), use sprintf()
+inline void qvsnprintf(char *buf, size_t bufsize, const char *format, va_list va)
+{
+  vsprintf(buf, format, va);
+}
+#endif
 
 static const char *buttonName[] =
 {
@@ -139,9 +149,9 @@ ushort messageBox( ushort aOptions, const char *fmt, ... )
 
 ushort inputBox( const char *Title, const char *aLabel, char *s, int limit )
 {
-    ushort len = max( strlen(aLabel) + 9 + limit, strlen(Title) + 11 );
-    len = min( len, 60 );
-    len = max( len , 24 );
+    ushort len = qmax( strlen(aLabel) + 9 + limit, strlen(Title) + 11 );
+    len = qmin( len, 60 );
+    len = qmax( len , 24 );
     TRect r(0, 0, len, 8);
     r.move((TProgram::deskTop->size.x - r.b.x) / 2,
            (TProgram::deskTop->size.y - r.b.y) / 2);
@@ -162,7 +172,7 @@ ushort inputBoxRect( const TRect &bounds,
     dialog = new TDialog(bounds, Title);
 
     int x = 4 + strlen( aLabel );
-    r = TRect( x, 2, min(x + limit + 2, dialog->size.x - 3), 3 );
+    r = TRect( x, 2, qmin(x + limit + 2, dialog->size.x - 3), 3 );
     control = new TInputLine( r, limit );
     dialog->insert( control );
 
@@ -183,7 +193,7 @@ ushort inputBoxRect( const TRect &bounds,
     dialog->setData(s);
     c = TProgram::application->execView(dialog);
     if( c != cmCancel )
-        dialog->getData(s);
+        dialog->getData(s, limit+1);
     TObject::destroy( dialog );
     return c;
 }

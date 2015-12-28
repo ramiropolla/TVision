@@ -256,16 +256,22 @@ void THWMouse::resume()
   buttonCount = num;
 }
 
+inline void set_conin_mode(void)
+{
+  if ( TThreads::my_console )
+    SetConsoleMode(TThreads::chandle[cnInput],TThreads::consoleMode);
+}
+
 void TV_CDECL THWMouse::show()
 {
   TThreads::consoleMode |= ENABLE_MOUSE_INPUT;
-  SetConsoleMode(TThreads::chandle[cnInput],TThreads::consoleMode);
+  set_conin_mode();
 }
 
 void TV_CDECL THWMouse::hide()
 {
   TThreads::consoleMode &= ~ENABLE_MOUSE_INPUT;
-  SetConsoleMode(TThreads::chandle[cnInput],TThreads::consoleMode);
+  set_conin_mode();
 }
 
 #endif  // __NT__

@@ -22,7 +22,8 @@ char *newStr( const char *s )
 {
     if( s == 0 )
         return 0;
-    char *temp = new char[ strlen(s)+1 ];
-    strcpy( temp, s );
+    size_t size = strlen(s) + 1;
+    char *temp = new char[ size ];
+    memcpy( temp, s, size );
     return temp;
 }

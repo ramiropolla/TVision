@@ -120,6 +120,11 @@ const ushort
     kbCtrlKIns       = 0x9200,
     kbCtrlKDel       = 0x9300,
 
+// nt/dw32/linux extensions
+    kbK5             = 0xa700,   
+    kbShiftK5        = 0xa800,   
+    kbAltK5          = 0xa900,
+
 //  Keyboard state  and shift masks
 
     kbRightShift  = 0x0001,

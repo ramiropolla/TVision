@@ -227,7 +227,7 @@ inline Boolean TMouse::present()
     return THWMouse::present();
 }
 
-#pragma pack(1)
+#pragma pack(push, 1)
 struct CharScanType
 {
 #ifdef __MACOSX__
@@ -238,7 +238,7 @@ struct CharScanType
     uchar scanCode;
 #endif
 };
-#pragma pack()
+#pragma pack(pop)
 
 struct KeyDownEvent
 {
@@ -287,8 +287,9 @@ struct MessageEvent
         };
 };
 
-struct TEvent
+class TEvent
 {
+public:
     ushort what;
     union
     {
@@ -320,7 +321,7 @@ public:
     friend void genRefs();
 #ifndef __LINUX__
     friend unsigned long getTicks(void);
-#endif    
+#endif
     friend class TProgram;
     static ushort doubleDelay;
     static Boolean mouseReverse;
@@ -641,42 +642,12 @@ public:
 
 #ifdef __NT__
 #define WIN32_LEAN_AND_MEAN
-//#define NOGDICAPMASKS     // CC_*, LC_*, PC_*, CP_*, TC_*, RC_
-//#define NOWINMESSAGES     // WM_*, EM_*, LB_*, CB_*
-//#define NOWINSTYLES       // WS_*, CS_*, ES_*, LBS_*, SBS_*, CBS_*
-//#define NOSYSMETRICS      // SM_*
-//#define NOMENUS           // MF_*
-//#define NOICONS           // IDI_*
-//#define NOKEYSTATES       // MK_*
-//#define NOSYSCOMMANDS     // SC_*
-//#define NORASTEROPS       // Binary and Tertiary raster ops
-//#define NOSHOWWINDOW      // SW_*
-//#define OEMRESOURCE       // OEM Resource values
-//#define NOATOM            // Atom Manager routines
-//#define NOCLIPBOARD       // Clipboard routines
-//#define NOCOLOR           // Screen colors
-//#define NODRAWTEXT        // DrawText() and DT_*
-//#define NONLS             // All NLS defines and routines
-//#define NOMB              // MB_* and MessageBox()
-//#define NOMEMMGR          // GMEM_*, LMEM_*, GHND, LHND, associated routines
-//#define NOMETAFILE        // typedef METAFILEPICT
-//#define NOMINMAX          // Macros min(a,b) and max(a,b)
-//#define NOOPENFILE        // OpenFile(), OemToAnsi, AnsiToOem, and OF_*
-//#define NOSCROLL          // SB_* and scrolling routines
-//#define NOSERVICE         // All Service Controller routines, SERVICE_ equates, etc.
-//#define NOSOUND           // Sound driver routines
-//#define NOTEXTMETRIC      // typedef TEXTMETRIC and associated routines
-//#define NOWH              // SetWindowsHook and WH_*
-//#define NOWINOFFSETS      // GWL_*, GCL_*, associated routines
-//#define NOCOMM            // COMM driver routines
-//#define NOKANJI           // Kanji support stuff.
-//#define NOHELP            // Help engine interface.
-//#define NOPROFILER        // Profiler interface.
-//#define NODEFERWINDOWPOS  // DeferWindowPos routines
 #include <windows.h>
 
-#pragma pack()
-#pragma options -a.
+// BCB5 does not define INVALID_FILE_ATTRIBUTES for some reason
+#if defined(__BORLANDC__) && __BORLANDC__ < 0x560 && !defined(INVALID_FILE_ATTRIBUTES)
+#define INVALID_FILE_ATTRIBUTES (-1)
+#endif
 
 class TThreads {
 public:
@@ -696,6 +667,10 @@ public:
   static inline int ispending(void) { return evpending; }
   static inline void accept_event(void) { evpending = 0; }
   static int macro_playing;
+  static bool my_console;
+#define MAX_GET_FROM_CLIP	(200*133)  // maximum size for insert in editdialog's
+  static char *clipboard_get(size_t &sz, bool line);
+  static bool clipboard_put(const char *str, size_t from, size_t to);
 };
 
 #endif // __NT__

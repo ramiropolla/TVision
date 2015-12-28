@@ -117,18 +117,18 @@ inline void TRect::grow( int aDX, int aDY )
 
 inline void TRect::intersect( const TRect& r )
 {
-    a.x = max( a.x, r.a.x );
-    a.y = max( a.y, r.a.y );
-    b.x = min( b.x, r.b.x );
-    b.y = min( b.y, r.b.y );
+    a.x = qmax( a.x, r.a.x );
+    a.y = qmax( a.y, r.a.y );
+    b.x = qmin( b.x, r.b.x );
+    b.y = qmin( b.y, r.b.y );
 }
 
 inline void TRect::Union( const TRect& r )
 {
-    a.x = min( a.x, r.a.x );
-    a.y = min( a.y, r.a.y );
-    b.x = max( b.x, r.b.x );
-    b.y = max( b.y, r.b.y );
+    a.x = qmin( a.x, r.a.x );
+    a.y = qmin( a.y, r.a.y );
+    b.x = qmax( b.x, r.b.x );
+    b.y = qmax( b.y, r.b.y );
 }
 
 inline Boolean TRect::contains( const TPoint& p ) const

@@ -29,6 +29,7 @@
 /*                                                            */
 /*------------------------------------------------------------*/
 
+#define USE_DANGEROUS_FUNCTIONS
 #include <tv.h>
 
 class HistRec
@@ -66,7 +67,7 @@ inline HistRec::HistRec( uchar nId, const char *nStr ) :
 }
 
 
-inline HistRec *advance( HistRec *ptr, size_t s )
+inline HistRec *hadvance( HistRec *ptr, size_t s )
 {
     return (HistRec *)((char *)ptr + s);
 }
@@ -78,10 +79,10 @@ inline HistRec *backup( HistRec *ptr, size_t s )
 
 inline HistRec *next( HistRec *ptr )
 {
-    return advance( ptr, ptr->len );
+    return hadvance( ptr, ptr->len );
 }
 
-ushort historySize = 1024;  // initial size of history block
+ushort historySize = 10240;  // initial size of history block
 
 static uchar curId;
 static HistRec *curRec;
@@ -137,7 +138,7 @@ static void insertString( uchar id, const char *str )
    'push out' the dummy record, but the other functions still would
    simply skip the 1st item.
 */
-        HistRec *dst = advance ( historyBlock, 5 );
+        HistRec *dst = hadvance ( historyBlock, 5 );
         HistRec *src = next( dst );
         ushort firstLen = dst->len;
         memmove( dst, src, size_t( (char *)lastRec - (char *)src ) );
@@ -151,7 +152,7 @@ static void insertString( uchar id, const char *str )
     char *src = (char *)historyBlock + 5;
     char *dst = src + len;
     memmove( dst, src, size_t( (char *)lastRec - src ) );
-    lastRec = advance ( lastRec, len );
+    lastRec = hadvance ( lastRec, len );
     new( (HistRec *)src ) HistRec( id, str );
 #endif
 }

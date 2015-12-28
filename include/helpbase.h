@@ -51,6 +51,7 @@ public:
     short offset;
     uchar length;
 
+    TPoint loc;         // added by ig 13.05.97
 };
 
 #pragma pack()
@@ -75,7 +76,7 @@ public:
     void addCrossRef( TCrossRef ref );
     void addParagraph( TParagraph *p );
     void getCrossRef( int i, TPoint& loc, uchar& length, int& ref );
-    char *getLine( int line, char *buffer, int buflen );
+    char *getLine( int line, char *buffer, size_t buflen );
     int getNumCrossRefs();
     int numLines();
     void setCrossRef( int i, TCrossRef& ref );
@@ -90,7 +91,7 @@ public:
 private:
 
     char *wrapText( char *text, int size, int& offset, Boolean wrap,
-                    char *lineBuf, int lineBufLen );
+                    char *lineBuf, size_t lineBufLen );
     void disposeParagraphs();
     int width;
     int lastOffset;
@@ -225,4 +226,9 @@ public:
 };
 
 extern TCrossRefHandler crossRefHandler;
+
+extern const char *tv_dynhelp;   // 02.08.98: dynamic help message for forms
+extern int tv_helpIndex;
+extern int tv_idcIndex;
+extern int tv_helponhelp;
 

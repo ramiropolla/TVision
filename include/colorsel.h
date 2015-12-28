@@ -8,22 +8,7 @@
  *
  * Modified by Sergio Sigala <sergio@sigala.it>
  */
-
-#if !defined( __COLOR_COMMAND_CODES )
-#define __COLOR_COMMAND_CODES
-
-/** \file colorsel.h
- * colorsel.h
- */
-
-const int
-  cmColorForegroundChanged = 71,
-  cmColorBackgroundChanged = 72,
-  cmColorSet               = 73,
-  cmNewColorItem           = 74,
-  cmNewColorIndex          = 75;
-
-#endif  // __COLOR_COMMAND_CODES
+#include <cm_codes.h>
 
 class TColorItem;
 class TColorGroup;
@@ -61,7 +46,7 @@ public:
      * string is created. `idx' is the color index. `nxt' is a pointer to the
      * next color item (its default value is 0).
      *
-     * See file `demo/tvdemo2.cc' for an example. 
+     * See file `demo/tvdemo2.cc' for an example.
      */
     TColorItem( const char *nm, uchar idx, TColorItem *nxt = 0 );
     /**
@@ -125,7 +110,7 @@ public:
      * color group (its default value is 0). `nxt' is a pointer to the next
      * color group (its default value is 0).
      *
-     * See file `demo/tvdemo2.cc' for an example. 
+     * See file `demo/tvdemo2.cc' for an example.
      */
     TColorGroup( const char *nm, TColorItem *itm = 0, TColorGroup *nxt = 0 );
     /**
@@ -152,7 +137,7 @@ public:
     friend TColorGroup& operator + ( TColorGroup& g, TColorItem& i);
     /**
      * Inserts another color group after this one by changing the
-     * @ref TColorGroup::next pointer. 
+     * @ref TColorGroup::next pointer.
      * @see TColorItem
      */
     friend TColorGroup& operator + ( TColorGroup& g1, TColorGroup& g2 );
@@ -591,7 +576,7 @@ public:
      * @see TListViewer::focusItem
      */
     virtual void focusItem( int item );
-    virtual void getText( char *dest, int item, int maxLen );
+    virtual void getText( char *dest, int item, size_t destsize );
 
 protected:
     /**
@@ -707,7 +692,7 @@ public:
      * @see TListViewer::focusItem
      */
     virtual void focusItem( int item );
-    virtual void getText( char *dest, int item, int maxLen );
+    virtual void getText( char *dest, int item, size_t destsize );
     /**
      * Calls @ref TListViewer::handleEvent(). Then, if the event is
      * cmNewColorItem, the appropriate item is focused and the viewer is
@@ -725,7 +710,7 @@ private:
         { return name; }
 protected:
     /**
-     * Each streamable class needs a "builder" to allocate the correct memory 
+     * Each streamable class needs a "builder" to allocate the correct memory
      * for its objects together with the initialized virtual table pointers.
      * This is achieved by calling this constructor with an argument of type
      * @ref StreamableInit.
@@ -832,11 +817,11 @@ public:
      * the contents of this object.
      * @see setData
      */
-    virtual void getData( void *rec );
+    virtual void getData( void *rec, size_t recsize );
     /**
      * Calls @ref TDialog::handleEvent() and redisplays if the broadcast event
      * generated is cmNewColorIndex.
-     */ 
+     */
     virtual void handleEvent( TEvent& event );
     /**
      * Writes the data record of this view.

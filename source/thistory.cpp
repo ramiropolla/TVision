@@ -89,8 +89,8 @@ void THistory::handleEvent( TEvent& event )
             if( c == cmOK )
                 {
                 char rslt[maxViewWidth];
-                historyWindow->getSelection( rslt );
-                strncpy( link->data, rslt, link->maxLen );
+                historyWindow->getSelection( rslt, sizeof(rslt) );
+                qstrncpy( link->data, rslt, link->maxLen+1 );
                 link->selectAll( True );
                 link->drawView();
                 }

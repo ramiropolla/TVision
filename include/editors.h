@@ -24,6 +24,8 @@
 #include <limits.h>
 #endif  // __LIMITS_H
 
+#include <cm_codes.h>
+
 #if !defined( __EDIT_COMMAND_CODES )
 #define __EDIT_COMMAND_CODES
 
@@ -38,39 +40,6 @@ const int
 
 const unsigned int
   sfSearchFailed = UINT_MAX; // 0xFFFF;
-
-const int
-  cmSave        = 80,
-  cmSaveAs      = 81,
-  cmFind        = 82,
-  cmReplace     = 83,
-  cmSearchAgain = 84;
-
-const
-  int cmCharLeft    = 500,
-  cmCharRight   = 501,
-  cmWordLeft    = 502,
-  cmWordRight   = 503,
-  cmLineStart   = 504,
-  cmLineEnd     = 505,
-  cmLineUp      = 506,
-  cmLineDown    = 507,
-  cmPageUp      = 508,
-  cmPageDown    = 509,
-  cmTextStart   = 510,
-  cmTextEnd     = 511,
-  cmNewLine     = 512,
-  cmBackSpace   = 513,
-  cmDelChar     = 514,
-  cmDelWord     = 515,
-  cmDelStart    = 516,
-  cmDelEnd      = 517,
-  cmDelLine     = 518,
-  cmInsMode     = 519,
-  cmStartSelect = 520,
-  cmHideSelect  = 521,
-  cmIndentMode  = 522,
-  cmUpdateTitle = 523;
 
   /** \var edOutOfMemory
    * @see TEditor::doSearchReplace
@@ -455,7 +424,7 @@ class TMemo : public TEditor
 public:
 
     TMemo( const TRect&, TScrollBar *, TScrollBar *, TIndicator *, size_t );
-    virtual void getData( void *rec );
+    virtual void getData( void *rec, size_t recsize );
     virtual void setData( void *rec );
     virtual size_t dataSize();
     virtual TPalette& getPalette() const;
@@ -499,7 +468,7 @@ inline opstream& operator << ( opstream& os, TMemo* cl )
 #if defined( Uses_TFileEditor ) && !defined( __TFileEditor )
 #define __TFileEditor
 
-#include <tvdir.h>
+#include <prodir.h>
 
 class TRect;
 class TScrollBar;
@@ -634,7 +603,7 @@ struct TFindDialogRec
 {
     TFindDialogRec( const char *str, ushort flgs )
         {
-        strcpy( find, str );
+        qstrncpy( find, str, sizeof(find) );
         options = flgs;
         }
     char find[maxFindStrLen];
@@ -654,8 +623,8 @@ struct TReplaceDialogRec
 {
     TReplaceDialogRec( const char *str, const char *rep, ushort flgs )
         {
-        strcpy( find, str );
-        strcpy( replace, rep );
+        qstrncpy( find, str, sizeof(find) );
+        qstrncpy( replace, rep, sizeof(replace) );
         options = flgs;
         }
     char find[maxFindStrLen];

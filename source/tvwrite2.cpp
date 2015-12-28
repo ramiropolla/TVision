@@ -75,15 +75,18 @@ void TView::writeViewRec1(short x1, short x2, TView* p, int shadowCounter ) {
             cbufp->Char.AsciiChar = *start++;
             cbufp->Attributes     = *start++;
           }
-          COORD bsize = {len,1};
-          static COORD from = {0,0};
-          WriteConsoleOutput(TThreads::chandle[cnOutput],cbuf,bsize,from,&to);
+          if ( TThreads::my_console )
+          {
+            COORD bsize = {len,1};
+            static COORD from = {0,0};
+            WriteConsoleOutput(TThreads::chandle[cnOutput],cbuf,bsize,from,&to);
+          }
         }
 #endif
 #ifdef __LINUX__
         if ( p->owner->buffer == TScreen::screenBuffer )
         {
-	  TScreen::writeRow(offset, dst, len);
+          TScreen::writeRow(offset, dst, len);
         }
 #endif
       }

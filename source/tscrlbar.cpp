@@ -94,7 +94,7 @@ int TScrollBar::getSize()
     else
         s = size.x;
 
-    return max( 3, s );
+    return qmax( 3, s );
 }
 
 static TPoint mouse;
@@ -163,8 +163,8 @@ void TScrollBar::handleEvent( TEvent& event )
                             i = mouse.y;
                         else
                             i = mouse.x;
-                        i = max( i, 1 );
-                        i = min( i, s-1 );
+                        i = qmax( i, 1 );
+                        i = qmin( i, s-1 );
                         }
                     else
                         i = getPos();
@@ -271,9 +271,9 @@ void TScrollBar::setParams( int aValue,
 {
  int  sValue;
 
-    aMax = max( aMax, aMin );
-    aValue = max( aMin, aValue );
-    aValue = min( aMax, aValue );
+    aMax = qmax( aMax, aMin );
+    aValue = qmax( aMin, aValue );
+    aValue = qmin( aMax, aValue );
     sValue = value;
     if( sValue != aValue || minVal != aMin || maxVal != aMax )
         {

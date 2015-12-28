@@ -12,8 +12,9 @@
 #define Uses_TScreen
 #define Uses_TThreaded
 #define Uses_TKeys
+#define Uses_TProgram
 #include <tv.h>
-#include <tvdir.h>
+#include <prodir.h>
 
 #include <stdio.h>
 #include <assert.h>
@@ -54,11 +55,6 @@ void TThreads::resume() {
   shutDownFlag=0;
   assert(! DosAllocMem((void**)&tiled,sizeof(TiledStruct),fALLOC | OBJ_TILE)    );
   tiled->modeInfo.cb = (unsigned short) sizeof(VIOMODEINFO);
-#if 0
-  printf("tiled=%lx\n", tiled);
-  char line[5];
-  gets(line);
-#endif
 
   if ( MouOpen ((PSZ) 0, &tiled->mouseHandle) != 0 ) tiled->mouseHandle = 0xFFFF;
 
@@ -155,7 +151,8 @@ void TThreads::resume() {
     GetConsoleCursorInfo( chandle[cnOutput], &crInfo );
     GetConsoleScreenBufferInfo( chandle[cnOutput], &sbInfo );
     GetConsoleMode(chandle[cnInput],&consoleMode);
-    consoleMode &= ~(ENABLE_LINE_INPUT|ENABLE_ECHO_INPUT|ENABLE_WINDOW_INPUT);
+    consoleMode &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+    consoleMode |= ENABLE_WINDOW_INPUT;
     SetConsoleMode(chandle[cnInput],consoleMode);
     evpending = 0;
     inited = 1;
@@ -249,39 +246,287 @@ static int event_type(INPUT_RECORD &ir) {
   return IO_IGN_EVENT;
 }
 
-INPUT_RECORD *TThreads::get_next_event(void) {
+int changed_nt_console_size = 0;
+
+INPUT_RECORD *TThreads::get_next_event(void)
+{
   if ( evpending ) return &ir;
   PeekConsoleInput(chandle[cnInput],&ir,1,&evpending);
-  if ( evpending ) {
+  if ( evpending )
+  {
     int code = event_type(ir);
 //    printf("evtype = %d\n",code);
-    switch ( code ) {
-      case IO_RAW_EVENT:
-        ReadConsoleInput(chandle[cnInput],&ir,1,&evpending);
-        break;
-      case IO_CHR_EVENT:
-        char chr;
-//      printf("before readconsole\n");
-        ReadConsole(chandle[cnInput],&chr,1,&evpending,NULL);
-//      printf("key %x %d\n",chr,evpending);
-        ir.Event.KeyEvent.uChar.AsciiChar = chr;
-        break;
-      case IO_IGN_EVENT:
-        ReadConsoleInput(chandle[cnInput],&ir,1,&evpending);
-        accept_event();
-        break;
+    if ( code  == IO_CHR_EVENT )
+    {
+      char chr;
+//    printf("before readconsole\n");
+      ReadConsole(chandle[cnInput],&chr,1,&evpending,NULL);
+//    printf("key %x %d\n",chr,evpending);
+      ir.Event.KeyEvent.uChar.AsciiChar = chr;
+    }
+    else
+    {
+      ReadConsoleInput(chandle[cnInput],&ir,1,&evpending);
+      if ( evpending && ir.EventType == WINDOW_BUFFER_SIZE_EVENT )
+      {
+        COORD nsz = ir.Event.WindowBufferSizeEvent.dwSize;
+        if(nsz.X < 80) nsz.X = 80;
+        if(nsz.Y < 25) nsz.Y = 25;
+        changed_nt_console_size = *(LPDWORD)&nsz;
+      }
+      if ( code != IO_RAW_EVENT ) accept_event();
     }
   }
   return evpending ? &ir : NULL;
 }
 
-#endif  // __NT__
+//---------------------------------------------------------------------------
+bool TThreads::my_console = true;
+
+static void switch_screen_size(HANDLE h, COORD from, COORD to)
+{
+  SMALL_RECT  r;
+  uchar       chg;
+
+  if ( *(LPDWORD)&from == *(LPDWORD)&to ) return;
+
+  ((LPDWORD)&r)[0] = 0;
+  ((LPDWORD)&r)[1] = *(LPDWORD)&to - 0x10001;
+  chg = 0;
+
+  if ( from.X < to.X )
+  {
+    r.Right = from.X-1;
+    ++chg;
+  }
+  if ( from.Y < to.Y )
+  {
+    r.Bottom = from.Y-1;
+    ++chg;
+  }
+  SetConsoleWindowInfo( h, TRUE, &r );
+  SetConsoleScreenBufferSize( h, to );
+  if( chg )
+  {
+    ((LPDWORD)&r)[0] = 0; // PARANOYA
+    ((LPDWORD)&r)[1] = *(LPDWORD)&to - 0x10001;
+    SetConsoleWindowInfo( h, TRUE, &r );
+  }
+}
+
+// 2 - notify TV of end of debugger (preserved)
+// 1 - application screen
+// 0 - TV screen
+// -1 - display the app screen and wait for a keyboard key, then switch back
+// -2 - notify TV of start new debugger (invalidate previous user screen)
+// and request ONLY (is switching supported on current display type? )
+// return: false if switching can't be realized or invalid status.
+bool TProgram::switch_screen(int to_user)
+{
+  static const COORD zero_coord = { 0, 0 };
+
+  static PCHAR_INFO           user_screen_buffer;
+  static COORD                user_screen_size;
+  static CONSOLE_CURSOR_INFO  user_cinfo;
+  static COORD                user_cursorpos;
+
+  switch ( to_user )
+  {
+    case -2:
+      *(LPDWORD)&user_screen_size &= 0; // flag of recreation
+      delete[] user_screen_buffer;
+      user_screen_buffer = NULL;
+      return(true);
+
+    case -1:
+      if( user_screen_buffer ) break;
+      //PASSTHRU
+    default:  // PARANOYA
+      return(false);
+
+    case 0:
+    case 1:
+      if ( to_user == (int)TThreads::my_console ) return(true);
+      break;
+  }
+
+  HANDLE  hout = TThreads::chandle[cnOutput];
+  if( to_user )
+  {
+    TThreads::my_console = false;
+    SetConsoleCursorPosition(hout, zero_coord);
+    if ( user_screen_buffer )
+    {
+      SMALL_RECT wrg = { 0, 0, user_screen_size.X-1, user_screen_size.Y-1 };
+      switch_screen_size(hout, TThreads::sbInfo.dwSize, user_screen_size);
+      WriteConsoleOutput(hout, user_screen_buffer, user_screen_size,
+                         zero_coord, &wrg);
+      SetConsoleCursorPosition(hout, user_cursorpos);
+    }
+    else if ( !*(LPDWORD)&user_screen_size ) // only first call
+    {
+      *(LPDWORD)&user_screen_size = (25 << 16) | 80;
+      switch_screen_size(hout, TThreads::sbInfo.dwSize, user_screen_size);
+      TDisplay::clearScreen(user_screen_size.X, user_screen_size.Y);
+      user_cursorpos = zero_coord;  // PARANOYA
+      user_cinfo.dwSize = 1;
+      user_cinfo.bVisible = TRUE;
+    }
+    SetConsoleCursorInfo(hout, &user_cinfo);
+    if ( to_user > 0 )
+      goto done;
+    {
+      HANDLE        hin = TThreads::chandle[cnInput];
+
+      SetConsoleMode(hin, 0);
+      Sleep(500); // anti-blink'ing and release hot-key wait
+      FlushConsoleInputBuffer(hin);
+
+      INPUT_RECORD  ir;
+      DWORD         c;
+      do if ( !ReadConsoleInput(hin, &ir, 1, &c) || !c ) break; // PARANOYA
+      while(ir.EventType != KEY_EVENT || !ir.Event.KeyEvent.bKeyDown);
+      Sleep(100); // skip immediate unpressing and keyboard 'zummers'
+      FlushConsoleInputBuffer(hin);
+      SetConsoleMode(hin, TThreads::consoleMode);
+    }
+  }
+  {
+    CONSOLE_SCREEN_BUFFER_INFO  cbi;
+
+    GetConsoleCursorInfo(hout, &user_cinfo);
+    GetConsoleScreenBufferInfo(hout, &cbi);
+    user_cursorpos = cbi.dwCursorPosition;
+    SetConsoleCursorPosition(hout, zero_coord);
+    if ( *(LPDWORD)&cbi.dwSize != *(LPDWORD)&user_screen_size )
+    {
+       delete[] user_screen_buffer;
+       user_screen_buffer = NULL; // unification
+    }
+    if ( !user_screen_buffer )
+    {
+       user_screen_buffer = new CHAR_INFO[cbi.dwSize.X * cbi.dwSize.Y];
+       user_screen_size = cbi.dwSize;
+    }
+    SMALL_RECT rgn = { 0, 0, cbi.dwSize.X-1, cbi.dwSize.Y-1 };
+    ReadConsoleOutput(hout, user_screen_buffer, cbi.dwSize, zero_coord, &rgn);
+    switch_screen_size(hout, cbi.dwSize, TThreads::sbInfo.dwSize);
+    SetConsoleCursorInfo(hout, &TThreads::crInfo);
+    TThreads::my_console = true;
+    application->redraw();
+  }
+done:
+  return(true);
+}
+
+void TProgram::at_child_exec(bool /*before*/) {}
+
+bool TThreads::clipboard_put(const char *str, size_t from, size_t to)
+{
+    bool res = false;
+    if ( to > from && OpenClipboard(NULL) )
+        {
+        size_t  sz = to - from;
+        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, sz+1);
+        if ( hMem != NULL )
+            {
+            LPVOID  pc = GlobalLock(hMem);
+            if ( pc == NULL ) GlobalFree(hMem);
+            else
+                {
+                  memcpy(pc, str + from, sz);
+                  ((char *)pc)[sz] = 0;
+                  GlobalUnlock(hMem);
+                  EmptyClipboard();
+                  if ( SetClipboardData(CF_OEMTEXT, hMem) ) res = true;
+                }
+            }
+        CloseClipboard();
+        }
+    return res;
+}
+
+char *TThreads::clipboard_get(size_t &sz, bool line)
+{
+    char *answer = NULL;
+    if ( IsClipboardFormatAvailable(CF_OEMTEXT) && OpenClipboard(NULL) )
+        {
+        HGLOBAL hMem = GetClipboardData(CF_OEMTEXT);
+        if ( hMem != NULL )
+            {
+            char *clip = (char *)GlobalLock(hMem);
+            if ( clip != NULL )
+                {
+                size_t  clsz = strlen(clip);
+                if ( clsz != 0 )
+                    {
+                    if ( sz < clsz ) clsz = sz;
+                    answer = (char *)malloc(clsz + 1);
+                    if ( answer != NULL )
+                        {
+                        char *p = answer;
+                        while ( *clip != 0 )
+                            {
+                            *p = *clip++;
+                            if ( *p < ' ' || *p == 127 )
+                                {
+                                if ( line && p == answer )
+                                    continue;
+                                if ( line || (*p != '\r' && *p != '\n') )
+                                    *p = ' ';
+                                }
+                            ++p;
+                            }
+                            if ( line )
+                                for ( ; p > answer; --p )
+                                  if ( p[-1] > ' ' ) break;
+                            if ( p == answer )
+                                {
+                                free ( answer);
+                                answer = NULL;
+                                }
+                            else
+                                {
+                                *p = '\0';
+                                sz = p - answer;
+                                }
+                        }
+                    }
+                }
+            GlobalUnlock(hMem);
+            }
+close_done:
+        CloseClipboard();
+        }
+    return answer;
+}
+
+#elif !defined(__LINUX__)
+#error "For this system not implemented!"
+#endif //__LINUX__
 
 //---------------------------------------------------------------------------
 
-#ifndef __BORLANDC__
+#ifdef __BORLANDC__
+int qgetcurdir(int __drive, char *buffer, size_t bufsize)
+{
+  char buf2[MAXSTR];
+  int code = getcurdir(__drive, buf2);
+  if ( code != -1 )
+    qstrncpy(buffer, buf2, bufsize);
+  return code;
+}
 
-#if __FAT__
+#else
+
+#ifdef __FAT__
+
+#ifdef _MSC_VER
+#pragma comment(lib,"user32")
+inline void _dos_getdrive(uint *drive)  {  *drive = _getdrive(); }
+inline void _dos_setdrive(int drive, uint *) { _chdrive(drive); }
+#endif // _MSC_VER
+
 int fnsplit(const char *__path,
             char *__drive,
             char *__dir,
@@ -356,13 +601,12 @@ int getdisk(void)
 // getcurdir should fill buffer with the current directory without
 // drive char and without a leading backslash.
 
-int getcurdir(int __drive, char *buffer)
+int qgetcurdir(int __drive, char *buffer, size_t bufsize)
 {
 #define MAXPATHLEN MAXPATH
   long size=MAXPATHLEN;
   char tmp[MAXPATHLEN+1];
   tmp[0]=DIRCHAR;
-#if 1
   unsigned int old, dummy;
   _dos_getdrive(&old);
   _dos_setdrive(__drive,&dummy);
@@ -371,33 +615,9 @@ int getcurdir(int __drive, char *buffer)
     return 0;
   }
   _dos_setdrive(old,&dummy);
-  strcpy(buffer,&tmp[3]);
+  qstrncpy(buffer, &tmp[3], bufsize);
   return 1;
-#endif  // 1
-#if 0
-#if defined(__OS2__)
-  size_t len;
-  char *p;
-  unsigned long l = MAXPATHLEN;
-  if (DosQueryCurrentDir(__drive,tmp+1,&l)) return NULL;
-  len = strlen (tmp) + 2;
-  if (buffer == NULL)
-    {
-      if (size < len) size = len;
-      buffer = new char[size];
-    }
-  if (buffer == NULL)
-    {
-      errno = ENOMEM;
-      return (0);
-    }
-  for (p = tmp; *p != 0; ++p) // no forward slashes please.
-    if (*p == '/') *p = DIRCHAR;
-  strcpy (buffer, tmp+1);
-  return 1;
-#endif  // __OS2__
-#endif  // 0
 }
-#endif  // if __FAT__
+#endif  // ifdef __FAT__
 
 #endif  // !__BORLANDC__ ig

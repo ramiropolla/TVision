@@ -451,13 +451,12 @@ void TColorGroupList::focusItem( int item )
     message( owner, evBroadcast, cmNewColorItem, curGroup->items);
 }
 
-void TColorGroupList::getText( char *dest, int item, int maxChars )
+void TColorGroupList::getText( char *dest, int item, size_t destsize )
 {
         TColorGroup *curGroup = groups;
         while( item-- > 0 )
                 curGroup = curGroup->next;
-        strncpy( dest, curGroup->name, maxChars );
-    dest[maxChars] = '\0';
+        qstrncpy( dest, curGroup->name, destsize );
 }
 
 #ifndef NO_TV_STREAMS
@@ -582,13 +581,12 @@ void TColorItemList::focusItem( int item )
     message( owner, evBroadcast, cmNewColorIndex, (void *)(int)(curItem->index));
 }
 
-void TColorItemList::getText( char *dest, int item, int maxChars )
+void TColorItemList::getText( char *dest, int item, size_t destsize )
 {
         TColorItem *curItem = items;
         while( item-- > 0 )
                 curItem = curItem->next;
-        strncpy( dest, curItem->name, maxChars );
-        dest[maxChars] = '\0';
+        qstrncpy( dest, curItem->name, destsize );
 }
 
 void TColorItemList::handleEvent( TEvent& event )
@@ -693,9 +691,10 @@ size_t TColorDialog::dataSize()
     return *pal->data + 1;
 }
 
-void TColorDialog::getData( void *rec )
+void TColorDialog::getData( void *rec, size_t recsize )
 {
-    memcpy( rec, pal->data, *pal->data+1 );
+    size_t s = qmin(*pal->data+1, recsize);
+    memcpy( rec, pal->data, s );
 }
 
 void TColorDialog::setData( void *rec)

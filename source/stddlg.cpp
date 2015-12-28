@@ -31,6 +31,7 @@
 #define Uses_TFileDialog
 #define Uses_TSortedCollection
 #include <tv.h>
+#include <prodir.h>
 
 #include <stdio.h>
 #ifdef __NT__
@@ -41,8 +42,6 @@
 char &shiftKeys = *(char *)MK_FP( 0x0, 0x417 );
 unsigned char getShiftState(void) { return shiftKeys; }
 #endif // __MSDOS__
-
-void fexpand( char * );
 
 #define cpInfoPane "\x1E"
 
@@ -60,14 +59,15 @@ void TFileInputLine::handleEvent( TEvent& event )
         !(state & sfSelected)
       )
         {
+        size_t dsize = dataSize();
         if( (((TSearchRec *)event.message.infoPtr)->attr & FA_DIREC) != 0 )
             {
-            strcpy( data, ((TSearchRec *)event.message.infoPtr)->name );
-            strcat( data, SDIRCHAR );
-            strcat( data, ((TFileDialog *)owner)->wildCard );
+            qstrncpy( data, ((TSearchRec *)event.message.infoPtr)->name, dsize );
+            qstrncat( data, SDIRCHAR, dsize );
+            qstrncat( data, ((TFileDialog *)owner)->wildCard, dsize );
             }
         else
-            strcpy( data, ((TSearchRec *)event.message.infoPtr)->name );
+            qstrncpy( data, ((TSearchRec *)event.message.infoPtr)->name, dsize );
         drawView();
         }
 }
@@ -83,82 +83,74 @@ TSortedListBox::TSortedListBox( const TRect& bounds,
     setCursor(1, 0);
 }
 
-static Boolean equal( const char *s1, const char *s2, ushort count)
-{
-    return Boolean( strnicmp( s1, s2, count ) == 0 );
-}
-
 void TSortedListBox::handleEvent(TEvent& event)
 {
-char curString[maxViewWidth], newString[maxViewWidth];  // 256->maxViewWidth, ig 04.02.99
-void* k;
-int value, oldPos, oldValue;
+  char curString[maxViewWidth];
+  char newString[maxViewWidth];
 
-    oldValue = focused;
-    TListBox::handleEvent( event );
-    if( oldValue != focused )
-        searchPos = -1;
-    if( event.what == evKeyDown )
+  int oldValue = focused;
+  TListBox::handleEvent( event );
+  if ( oldValue != focused )
+    searchPos = -1;
+  if ( event.what == evKeyDown )
+  {
+    if ( event.keyDown.charScan.charCode != 0 )
+    {
+      int value = focused;
+      if ( value < range )
+        getText( curString, value, sizeof(curString) );
+      else
+        *curString = EOS;
+      int oldPos = searchPos;
+      if ( event.keyDown.keyCode == kbBack )
+      {
+        if ( searchPos == -1 )
+          return;
+        curString[searchPos] = EOS;
+        searchPos--;
+        if( searchPos == -1 )
+          shiftState = (ushort)event.keyDown.controlKeyState;
+      }
+      else if ( (event.keyDown.charScan.charCode == '.') )
+      {
+        char *loc = strchr( curString, '.' );
+        if ( loc == 0 )
+          searchPos = -1;
+        else
+          searchPos = ushort(loc - curString);
+      }
+      else
+      {
+        searchPos++;
+        if ( searchPos == 0 )
+          shiftState = (ushort) event.keyDown.controlKeyState;
+        curString[searchPos] = event.keyDown.charScan.charCode;
+        curString[searchPos+1] = EOS;
+      }
+      void *k = getKey(curString);
+      list()->search( k, value );
+      if ( value < range )
+      {
+        getText( newString, value, sizeof(newString) );
+        if( strnicmp( curString, newString, searchPos+1 ) == 0 )
         {
-        if( event.keyDown.charScan.charCode != 0 )
-            {
-            value = focused;
-            if( value < range )
-                getText( curString, value, sizeof(curString)-1 );
-            else
-                *curString = EOS;
-            oldPos = searchPos;
-            if( event.keyDown.keyCode == kbBack )
-                {
-                if( searchPos == -1 )
-                    return;
-                curString[searchPos] = EOS;
-                searchPos--;
-                if( searchPos == -1 )
-                    shiftState = (ushort) event.keyDown.controlKeyState;
-                }
-            else if( (event.keyDown.charScan.charCode == '.') )
-                {
-                char *loc = strchr( curString, '.' );
-                if( loc == 0 )
-                    searchPos = -1;
-                else
-                    searchPos = ushort(loc - curString);
-                }
-            else
-                {
-                searchPos++;
-                if( searchPos == 0 )
-                    shiftState = (ushort) event.keyDown.controlKeyState;
-                curString[searchPos] = event.keyDown.charScan.charCode;
-                curString[searchPos+1] = EOS;
-                }
-            k = getKey(curString);
-            list()->search( k, value );
-            if( value < range )
-                {
-                getText( newString, value, sizeof(newString)-1 );
-                if( equal( curString, newString, searchPos+1 ) )
-                    {
-                    if( value != oldValue )
-                        {
-                        focusItem(value);
-                        setCursor( cursor.x+searchPos, cursor.y );
-                        }
-                    else
-                        setCursor(cursor.x+(searchPos-oldPos), cursor.y );
-                    }
-                else
-                    searchPos = oldPos;
-                }
-            else
-                searchPos = oldPos;
-            if( searchPos != oldPos ||
-                isalpha( event.keyDown.charScan.charCode )
-              )
-                clearEvent(event);
-            }
+          if( value != oldValue )
+          {
+            focusItem(value);
+            setCursor( cursor.x+searchPos, cursor.y );
+          }
+          else
+            setCursor(cursor.x+(searchPos-oldPos), cursor.y );
         }
+        else
+          searchPos = oldPos;
+      }
+      else
+        searchPos = oldPos;
+      if ( searchPos != oldPos ||  isalpha( event.keyDown.charScan.charCode ) )
+        clearEvent(event);
+    }
+  }
 }
 
 void* TSortedListBox::getKey( const char *s )
@@ -188,7 +180,16 @@ static void fname_startup(void)
       *(FARPROC *)&getLongName = GetProcAddress(GetModuleHandleA("kernel32"),
                                                 "GetLongPathNameA");
 }
+
+#if defined(_MSC_VER)
+class tvinit { public: tvinit(void) { fname_startup(); }};
+static tvinit tv_initializer;
+#elif defined(__BORLANDC__)
 #pragma startup fname_startup
+#else
+#error "Unknown compiler"
+#endif
+
 #endif  //__NT__
 
 void TFileInfoPane::draw()
@@ -196,16 +197,16 @@ void TFileInfoPane::draw()
     Boolean PM;
     TDrawBuffer b;
     ushort  color;
-    ftime *time;
+    dos_ftime *time;
     char  path[MAXPATH], *pfn;
-    int   fpos;
+    size_t fpos;
 
-    strcpy( path, ((TFileDialog *)owner)->directory );
+    qstrncpy( path, ((TFileDialog *)owner)->directory, sizeof(path) );
 #ifdef __NT__
     if(getLongName) getLongName(path, path, sizeof(path));
 #endif // __NT__
-    strcat( path, ((TFileDialog *)owner)->wildCard );
-    fexpand( path );
+    qstrncat( path, ((TFileDialog *)owner)->wildCard, sizeof(path) );
+    fexpand( path, sizeof(path) );
 
     color = getColor(0x01);
     b.moveChar( 0, ' ', color, size.x );
@@ -220,11 +221,11 @@ void TFileInfoPane::draw()
     b.moveChar( 0, ' ', color, size.x );
     pfn   = file_block.name;  // unification
 #ifdef __NT__
-    if(getLongName) { // w95 & NT4 no have this function
+    if(getLongName) { // w95 & NT4 don't have this function
       char  *p = strrchr(path, DIRCHAR);
 
       if(p) { // PARANOYA
-        strcpy(p+1, pfn);
+        qstrncpy(p+1, pfn, path+sizeof(path)-p-1);
         if((fpos = getLongName(path, path, sizeof(path))) != 0) {
           if(path[--fpos] == DIRCHAR && path[fpos-1] != ':') path[fpos] = '\0';
           pfn = strrchr(path, DIRCHAR) + 1;
@@ -246,18 +247,18 @@ void TFileInfoPane::draw()
     if( *(file_block.name) != EOS )
         {
         char buf[10];
-	sprintf(buf, "%ld", file_block.size);
+	qsnprintf(buf, sizeof(buf), "%ld", file_block.size);
         b.moveStr( 3, buf, color );
 
-        time = (ftime *) &file_block.time;
+        time = (dos_ftime *) &file_block.time;
         b.moveStr( 21, months[time->ft_month], color );
 
-	sprintf(buf, "%02d", time->ft_day);
+	qsnprintf(buf, sizeof(buf), "%02d", time->ft_day);
         b.moveStr( 25, buf, color );
 
         b.putChar( 27, ',' );
 
-	sprintf(buf, "%d", time->ft_year+1980);
+	qsnprintf(buf, sizeof(buf), "%d", time->ft_year+1980);
         b.moveStr( 28, buf, color );
 
         PM = Boolean(time->ft_hour >= 12 );
@@ -266,11 +267,11 @@ void TFileInfoPane::draw()
         if( time->ft_hour == 0 )
             time->ft_hour = 12;
 
-        sprintf(buf, "%02d", time->ft_hour);
+        qsnprintf(buf, sizeof(buf), "%02d", time->ft_hour);
         b.moveStr( 34, buf, color );
         b.putChar( 36, ':' );
 
-        sprintf(buf, "%02d", time->ft_min);
+        qsnprintf(buf, sizeof(buf), "%02d", time->ft_min);
         b.moveStr( 37, buf, color );
 
         b.moveStr( 39, PM ? pmText : amText, color );

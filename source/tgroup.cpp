@@ -238,14 +238,14 @@ void TGroup::getBuffer()
             TVMemMgr::allocateDiscardable( (void * &)buffer, size.x * size.y * sizeof(ushort) );
 }
 
-void TGroup::getData(void *rec)
+void TGroup::getData(void *rec, size_t recsize)
 {
     size_t i = 0;
     if (last != 0 )
         {
         TView* v = last;
         do  {
-            v->getData( ((char *)rec) + i );
+            v->getData( ((char *)rec) + i, recsize-i );
             i += v->dataSize();
             v = v->prev();
             } while( v != last );

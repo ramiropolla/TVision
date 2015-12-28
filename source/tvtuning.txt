@@ -11,7 +11,7 @@
  SecureCRT   |   xterm    | xtrack | Emulation->Terminal: xterm+internal kbd
              |            |        |
              |            |        |
- Putty       |xterm-scokey|   -    | Terminal,Keyboard: ControlH, Standard,
+ Putty       |xterm-scokey|   -    | Terminal,Keyboard: Control?, Standard,
              |            |        |                    SCO, Normal, Normal
              |            |        |
  Putty       |   xterm    |   -    | Terminal,Keyboard: ControlH, Standard,
@@ -23,7 +23,14 @@
 
 We recommend to use the 'xterm-scokey' terminal type for remote clients.
 
-Russian uses should append the following settings to the above:
+When the terminal type is xterm-scokey then add to /etc/inputrc
+(or to ~/.inputrc) the following string:
+
+"\e[.": delete char
+
+When working on the console without GPM installed, append "noGPM" to TVOPT.
+
+Russian users should append the following settings to the above:
 
                   | _APPEND_  TO TVOPT  | _APPEND_ TO Client Settings
  -----------------|---------------------|----------------------------
@@ -44,3 +51,5 @@ Russian uses should append the following settings to the above:
          setfont alt-8x16.psf.gz -m koi2al
          loadkey ru-ms.map
          export TVOPT=cyrcvt=linux,alt866
+
+

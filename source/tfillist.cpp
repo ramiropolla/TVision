@@ -24,17 +24,17 @@
 #define Uses_TGroup
 #define Uses_TKeys
 #include <tv.h>
-#include <tvdir.h>
 
+#include <time.h>
 #include <errno.h>
 #include <stdio.h>
 #include <assert.h>
 
 #ifdef __LINUX__
+#include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <glob.h>
-#include <time.h>
 #endif
 
 
@@ -56,7 +56,7 @@ void TFileList::focusItem( int item )
     message( owner, evBroadcast, cmFileFocused, list()->at(item) );
 }
 
-void TFileList::getData( void * )
+void TFileList::getData( void *, size_t )
 {
 }
 
@@ -77,21 +77,20 @@ static TSearchRec sR;
         sR.attr = FA_DIREC;
     else
         sR.attr = 0;
-    strcpy( sR.name, s );
+    qstrncpy( sR.name, s, sizeof(sR.name) );
 #ifdef __MSDOS__
     strupr( sR.name );
 #endif
     return &sR;
 }
 
-void TFileList::getText( char *dest, int item, int maxChars )
+void TFileList::getText( char *dest, int item, size_t destsize )
 {
   TSearchRec *f = (TSearchRec *)(list()->at(item));
 
-  strncpy( dest, f->name, maxChars );
-  dest[maxChars] = '\0';
+  qstrncpy( dest, f->name, destsize );
   if ( f->attr & FA_DIREC )
-    strcat( dest, SDIRCHAR );
+    qstrncat( dest, SDIRCHAR, destsize );
 }
 
 void TFileList::handleEvent( TEvent & event )
@@ -110,35 +109,41 @@ void TFileList::handleEvent( TEvent & event )
 void TFileList::readDirectory( const char *dir, const char *wildCard )
 {
     char path[MAXPATH];
-    strcpy( path, dir );
-    strcat( path, wildCard );
+    qstrncpy( path, dir, sizeof(path) );
+    qstrncat( path, wildCard, sizeof(path) );
     readDirectory( path );
 }
 
+#if !defined(__FAT__) || defined(_MSC_VER)
+static long time2searchrec(time_t ftime)
+{
+  dos_ftime t;
+  struct tm *broken = localtime(&ftime);
+  t.ft_tsec = broken->tm_sec / 2;
+  t.ft_min = broken->tm_min;
+  t.ft_hour = broken->tm_hour;
+  t.ft_day = broken->tm_mday;
+
+  /*
+   * Month value should begin at 1.
+   * Date: Thu, 23 Jan 1997 11:34:50 +0100 (MET)
+   */
+  t.ft_month = broken->tm_mon + 1;
+  t.ft_year = broken->tm_year - 80;
+  return *(long *)&t;
+}
+#endif
+
 struct DirSearchRec : public TSearchRec
 {
-#if !__FAT__
+#ifndef __FAT__
   void readFf_blk(const char *filename, struct stat &s)
   {
     attr = FA_ARCH;
     if (S_ISDIR(s.st_mode)) attr |= FA_DIREC;
-    strcpy(name, filename);
+    qstrncpy(name, filename, sizeof(name));
     size = s.st_size;
-
-    ftime t;
-    struct tm *broken = localtime(&s.st_mtime);
-    t.ft_tsec = broken->tm_sec / 2;
-    t.ft_min = broken->tm_min;
-    t.ft_hour = broken->tm_hour;
-    t.ft_day = broken->tm_mday;
-
-    /*
-     * Month value should begin at 1.
-     * Date: Thu, 23 Jan 1997 11:34:50 +0100 (MET)
-     */
-    t.ft_month = broken->tm_mon + 1;
-    t.ft_year = broken->tm_year - 80;
-    time = *(long *) &t;
+    time = time2searchrec(s.st_mtime);
   }
 #endif
   void *operator new( size_t );
@@ -158,7 +163,7 @@ void *DirSearchRec::operator new( size_t sz )
 
 void TFileList::readDirectory( const char *aWildCard )
 {
-#if __FAT__
+#ifdef __FAT__
   ffblk s;
 
   char path[MAXPATH];
@@ -173,23 +178,27 @@ void TFileList::readDirectory( const char *aWildCard )
 
   TFileCollection *fileList = new TFileCollection( 5, 5 );
 
-  strcpy( path, aWildCard );
-  fexpand( path );
+  qstrncpy( path, aWildCard, sizeof(path) );
+  fexpand( path, sizeof(path) );
   fnsplit( path, drive, dir, file, ext );
 
   res = findfirst( aWildCard, &s, findAttr );
   p = (DirSearchRec *)&p;
-  while( p != 0 && res == 0 )
+  while( p != NULL && res == 0 )
   {
     if( (s.ff_attrib & FA_DIREC) == 0 )
     {
       p = new DirSearchRec;
-      if( p != 0 )
+      if( p != NULL )
       {
         p->attr = s.ff_attrib;
+#if defined(_MSC_VER)
+        p->time = time2searchrec(s.ff_ftime);
+#else
         p->time = s.ff_ftime + (long(s.ff_fdate) << 16);
+#endif
         p->size = s.ff_fsize;
-        strcpy(p->name,s.ff_name);
+        qstrncpy(p->name, s.ff_name, sizeof(p->name));
         fileList->insert( p );
       }
     }
@@ -211,18 +220,26 @@ void TFileList::readDirectory( const char *aWildCard )
       if ( strcmp(s.ff_name,"..") == 0 )
       {
         upattr = s.ff_attrib;
+#if defined(_MSC_VER)
+        uptime = time2searchrec(s.ff_ftime);
+#else
         uptime = s.ff_ftime + (long(s.ff_fdate) << 16);
+#endif
         upsize = s.ff_fsize;
       }
       else if ( s.ff_name[0] != '.' || s.ff_name[1] != '\0' )
       {
         p = new DirSearchRec;
-        if ( p != 0 )
+        if ( p != NULL )
         {
           p->attr = s.ff_attrib;
+#if defined(_MSC_VER)
+          p->time = time2searchrec(s.ff_ftime);
+#else
           p->time = s.ff_ftime + (long(s.ff_fdate) << 16);
+#endif
           p->size = s.ff_fsize;
-          strcpy(p->name,s.ff_name);
+          qstrncpy(p->name, s.ff_name, sizeof(p->name));
           fileList->insert( p );
         }
       }
@@ -238,7 +255,7 @@ void TFileList::readDirectory( const char *aWildCard )
       p->attr = upattr;
       p->time = uptime;
       p->size = upsize;
-      strcpy( p->name, ".." );
+      qstrncpy( p->name, "..", sizeof(p->name) );
       fileList->insert( p );
     }
   }
@@ -254,10 +271,11 @@ void TFileList::readDirectory( const char *aWildCard )
   struct stat s;
 
 //  printf("path=%s\n", aWildCard);
-  strcpy( path, aWildCard );
-  if (!isWild(path)) strcat(path, "*");
-  fexpand( path );
-  expandPath(path, dir, file);
+  qstrncpy( path, aWildCard, sizeof(path) );
+  if ( !isWild(path) )
+    qstrncat(path, "*", sizeof(path));
+  fexpand(path, sizeof(path));
+  expandPath(path, dir, sizeof(dir), file, sizeof(file));
 //  printf("expand=%s, %s\n", dir, file);
   TFileCollection *fileList = new TFileCollection( 5, 5 );
 
@@ -294,7 +312,7 @@ void TFileList::readDirectory( const char *aWildCard )
 
   /* now read all directory names */
 
-  sprintf(path, "%s.", dir);
+  qsnprintf(path, sizeof(path), "%s.", dir);
   if ((dp = opendir(path)) != NULL)
   {
     while ((de = readdir(dp)) != NULL)
@@ -306,7 +324,7 @@ void TFileList::readDirectory( const char *aWildCard )
 
       /* is it a directory ? */
 
-      sprintf(path, "%s%s", dir, de->d_name);
+      qsnprintf(path, sizeof(path), "%s%s", dir, de->d_name);
       if (stat(path, &s) == 0 && S_ISDIR(s.st_mode))
       {
         if ((p = new DirSearchRec) == NULL) break;
@@ -323,11 +341,11 @@ void TFileList::readDirectory( const char *aWildCard )
     p = new DirSearchRec;
     if( p != 0 )
       {
-          sprintf(path, "%s..", dir);
+          qsnprintf(path, sizeof(path), "%s..", dir);
           if (stat(path, &s) == 0) p->readFf_blk("..", s);
           else
           {
-                  strcpy( p->name, ".." );
+                  qstrncpy( p->name, "..", sizeof(p->name) );
                   p->size = 0;
                   p->time = 0x210000uL;
                   p->attr = FA_DIREC;
@@ -335,7 +353,7 @@ void TFileList::readDirectory( const char *aWildCard )
           fileList->insert( p );
       }
   }
-#endif // if __FAT__
+#endif // ifdef __FAT__
   if ( p == 0 )
     messageBox( tooManyFiles, mfOKButton | mfWarning );
   newList(fileList);
@@ -350,7 +368,7 @@ void TFileList::readDirectory( const char *aWildCard )
   }
 }
 
-#if __FAT__
+#ifdef __FAT__
 /*
     fexpand:    reimplementation of pascal's FExpand routine.  Takes a
                 relative DOS path and makes an absolute path of the form
@@ -364,43 +382,43 @@ void TFileList::readDirectory( const char *aWildCard )
 
 static void squeeze( char *path )
 {
-    char *
-    dest = path;
-    char *
-    src = path;
-    while( *src != 0 )
+  char *dest = path;
+  char *src = path;
+  while( *src != 0 )
+  {
+    if (*src == '.')
+      if (src[1] == '.')
+      {
+        src += 2;
+        if (dest > path)
         {
-        if (*src == '.')
-          if (src[1] == '.') {
-            src += 2;
-            if (dest > path) {
-              dest--;
-              while ((*--dest != DIRCHAR)&&(dest > path)) // back up to the previous '\'
-                ;
-              dest++;         // move to the next position
-              }
-            }
-          else if (src[1] == DIRCHAR)
-            src++;
-          else
-            *dest++ = *src++;
-        else
-          *dest++ = *src++;
+          dest--;
+          while ((*--dest != DIRCHAR)&&(dest > path)) // back up to the previous '\'
+            ;
+          dest++;         // move to the next position
         }
-    *dest = EOS;                // zero terminator
-    dest = path;
-    src = path;
-    while( *src != 0 )
-        {
-        if ((*src == DIRCHAR)&&(src[1] == DIRCHAR))
-          src++;
-        else
-          *dest++ = *src++;
-        }
-    *dest = EOS;                // zero terminator
+      }
+      else if (src[1] == DIRCHAR)
+        src++;
+      else
+        *dest++ = *src++;
+    else
+      *dest++ = *src++;
+  }
+  *dest = EOS;                // zero terminator
+  dest = path;
+  src = path;
+  while( *src != 0 )
+  {
+    if ((*src == DIRCHAR)&&(src[1] == DIRCHAR))
+      src++;
+    else
+      *dest++ = *src++;
+  }
+  *dest = EOS;                // zero terminator
 }
 
-void fexpand( char *rpath )
+void fexpand( char *rpath, size_t rpathsize )
 {
 char path[MAXPATH];
 char drive[MAXDRIVE];
@@ -419,23 +437,22 @@ char ext[MAXEXT];
     if( (flags & DIRECTORY) == 0 || dir[0] != DIRCHAR )
         {
         char curdir[MAXDIR];
-        getcurdir( drive[0] - 'A' + 1, curdir );
+        qgetcurdir( drive[0] - 'A' + 1, curdir, sizeof(curdir) );
         // ++ V.Timonin : better more than nothing
-        int
-        len = strlen(curdir);
+        size_t len = strlen(curdir);
         if (curdir[len - 1] != DIRCHAR) {
           curdir[len] = DIRCHAR;
           curdir[len + 1] = EOS;
           }
         // -- V.Timonin
-        strcat( curdir, dir );
+        qstrncat( curdir, dir, sizeof(curdir) );
         if( *curdir != DIRCHAR )
             {
-            *dir = DIRCHAR;
-            strcpy( dir+1, curdir );
+            dir[0] = DIRCHAR;
+            qstrncpy( dir+1, curdir, sizeof(dir)-1 );
             }
         else
-            strcpy( dir, curdir );
+            qstrncpy( dir, curdir, sizeof(dir) );
         }
 
     //++ V.Timonin - squeeze must be after '/' --> '\\'
@@ -448,7 +465,7 @@ char ext[MAXEXT];
 #ifdef __MSDOS__
     strupr( path );
 #endif
-    strcpy( rpath, path );
+    qstrncpy( rpath, path, rpathsize );
 }
 #endif
 

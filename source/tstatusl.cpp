@@ -104,8 +104,8 @@ void TStatusLine::drawSelect( TStatusItem *selected )
         }
     if( i < size.x - 2 )
         {
-        strcpy( hintBuf, hint( helpCtx ) );
-        if( *hintBuf != EOS )
+        qstrncpy( hintBuf, hint( helpCtx ), sizeof(hintBuf) );
+        if( hintBuf[0] != EOS )
             {
             b.moveStr( i, hintSeparator, cNormal );
             i += 2;

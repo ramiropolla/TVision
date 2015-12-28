@@ -33,7 +33,7 @@ TStaticText::TStaticText( const TRect& bounds, const char *aText ) :
 
 TStaticText::~TStaticText()
 {
-    delete[] text;
+    delete[] (char*)text;
 }
 
 void TStaticText::draw()
@@ -45,7 +45,7 @@ void TStaticText::draw()
     char s[TEXTBUF_SIZE];
 
     color = getColor(1);
-    getText(s);
+    getText(s, sizeof(s));
     l = strlen(s);
     p = 0;
     y = 0;
@@ -98,13 +98,15 @@ TPalette& TStaticText::getPalette() const
     return palette;
 }
 
-void TStaticText::getText( char *s )
+void TStaticText::getText( char *str, size_t strsize )
 {
-    if( text == 0 )
-        *s = EOS;
+  if ( ssize_t(strsize) > 0 )
+  {
+    if ( text == 0 )
+      *str = EOS;
     else
-        strncpy( s, text, TEXTBUF_SIZE );
-    s[TEXTBUF_SIZE-1] = EOS;
+      qstrncpy( str, text, strsize );
+  }
 }
 
 #ifndef NO_TV_STREAMS

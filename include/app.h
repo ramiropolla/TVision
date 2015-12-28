@@ -195,7 +195,7 @@ public:
      * then inserted into the desk top.
      * @see TDeskInit:TDeskInit
      * @see TGroup::TGroup
-     *      
+     *
      * @ref growMode is set to @ref gfGrowHiX | @ref gfGrowHiY.
      */
     TDeskTop( const TRect& bounds );
@@ -497,7 +497,7 @@ public:
      *
      * getEvent() first checks if @ref TProgram::putEvent() has generated a
      * pending event. If so, getEvent() returns that event. If there is no
-     * pending event, getEvent() calls @ref TScreen::getEvent(). 
+     * pending event, getEvent() calls @ref TScreen::getEvent().
      *
      * If both calls return @ref evNothing, indicating that no user input is
      * available, getEvent() calls @ref TProgram::idle() to allow "background"
@@ -787,7 +787,21 @@ public:
 #endif
 
 #define TV_DEFAULT_EVENT_DELAY  1000
-
+private:
+    // switch the screen (tv-application screen)
+    // 1 - application screen
+    // 0 - TV screen
+    // -1 - display the app screen and wait for a keyboard key, then switch back
+    // -2 - notify TV of start new debugger (invalidate previous user screen)
+    // and (ONLY for linux) request ONLY (is switching supported on current display type? )
+    // return: false if switching can't be realized or invalid status.
+    static bool switch_screen(int to_user);
+public:
+    static bool screen_to_me(void)             { return switch_screen(0);  }
+    static bool screen_to_child(void)          { return switch_screen(1);  }
+    static bool screen_to_child_and_wait(void) { return switch_screen(-1); }
+    static bool can_switch_screen(void)        { return switch_screen(-2); }
+    static void at_child_exec(bool before);	// for debugger
 
 protected:
     /**

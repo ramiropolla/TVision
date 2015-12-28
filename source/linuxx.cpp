@@ -1,4 +1,4 @@
-/* $Id: linuxx.cpp,v 1.8 2004/08/28 22:57:38 jeremy Exp $ */
+/* $Id: linuxx.cpp,v 1.12 2005/03/29 22:13:30 jeremy Exp $ */
 /*
  * system.cc
  *
@@ -131,6 +131,14 @@ static Region expose_region;
 #define DEFAULT_BGCOLOR_5	"magenta4"
 #define DEFAULT_BGCOLOR_6	"brown"
 #define DEFAULT_BGCOLOR_7	"grey80"
+#define DEFAULT_BGCOLOR_8	"grey30"
+#define DEFAULT_BGCOLOR_9	"blue"
+#define DEFAULT_BGCOLOR_10	"green"
+#define DEFAULT_BGCOLOR_11	"cyan"
+#define DEFAULT_BGCOLOR_12	"red"
+#define DEFAULT_BGCOLOR_13	"magenta"
+#define DEFAULT_BGCOLOR_14	"yellow"
+#define DEFAULT_BGCOLOR_15	"white"
 /* Foreground colors */
 #define DEFAULT_FGCOLOR_0	"black"
 #define DEFAULT_FGCOLOR_1	"blue4"
@@ -149,8 +157,6 @@ static Region expose_region;
 #define DEFAULT_FGCOLOR_14	"yellow"
 #define DEFAULT_FGCOLOR_15	"white"
 
-#define qnumber(x) (sizeof(x)/sizeof(x[0]))
-
 /*
  * Default window geometry.
  */
@@ -166,7 +172,15 @@ static char *bgColor[] = {
   DEFAULT_BGCOLOR_4,
   DEFAULT_BGCOLOR_5,
   DEFAULT_BGCOLOR_6,
-  DEFAULT_BGCOLOR_7
+  DEFAULT_BGCOLOR_7,
+  DEFAULT_BGCOLOR_8,
+  DEFAULT_BGCOLOR_9,
+  DEFAULT_BGCOLOR_10,
+  DEFAULT_BGCOLOR_11,
+  DEFAULT_BGCOLOR_12,
+  DEFAULT_BGCOLOR_13,
+  DEFAULT_BGCOLOR_14,
+  DEFAULT_BGCOLOR_15
 };
 
 /* Foreground text colors */
@@ -210,6 +224,14 @@ static XResource TvisionResources[] = {
   { "tvision.text.bgcolor5",  "Tvision.Text.Bgcolor5",  &bgColor[5] },
   { "tvision.text.bgcolor6",  "Tvision.Text.Bgcolor6",  &bgColor[6] },
   { "tvision.text.bgcolor7",  "Tvision.Text.Bgcolor7",  &bgColor[7] },
+  { "tvision.text.bgcolor8",  "Tvision.Text.Bgcolor8",  &bgColor[8] },
+  { "tvision.text.bgcolor9",  "Tvision.Text.Bgcolor9",  &bgColor[9] },
+  { "tvision.text.bgcolor10", "Tvision.Text.Bgcolor10", &bgColor[10] },
+  { "tvision.text.bgcolor11", "Tvision.Text.Bgcolor11", &bgColor[11] },
+  { "tvision.text.bgcolor12", "Tvision.Text.Bgcolor12", &bgColor[12] },
+  { "tvision.text.bgcolor13", "Tvision.Text.Bgcolor13", &bgColor[13] },
+  { "tvision.text.bgcolor14", "Tvision.Text.Bgcolor14", &bgColor[14] },
+  { "tvision.text.bgcolor15", "Tvision.Text.Bgcolor15", &bgColor[15] },
   { "tvision.text.fgcolor0",  "Tvision.Text.Fgcolor0",  &fgColor[0] },
   { "tvision.text.fgcolor1",  "Tvision.Text.Fgcolor1",  &fgColor[1] },
   { "tvision.text.fgcolor2",  "Tvision.Text.Fgcolor2",  &fgColor[2] },
@@ -250,7 +272,7 @@ static void error(const char *format, ...)
   va_start(va, format);
   vfprintf(stderr, format, va);
   va_end(va);
-  abort();
+  exit(-1);
 }
 
 static void warning(const char *format, ...)
@@ -472,6 +494,16 @@ static const KeyboardXlat plainXlatSeed[] = {
   { XK_Delete,          kbDel       },
 // XXX ASCII dependent
   { XK_KP_Multiply,     '*'         },
+  { XK_KP_0,            '0'         },
+  { XK_KP_1,            '1'         },
+  { XK_KP_2,            '2'         },
+  { XK_KP_3,            '3'         },
+  { XK_KP_4,            '4'         },
+  { XK_KP_5,            '5'         },
+  { XK_KP_6,            '6'         },
+  { XK_KP_7,            '7'         },
+  { XK_KP_8,            '8'         },
+  { XK_KP_9,            '9'         },
 //
 // These key down events must be ignored because they are not
 // emitted by the IBM PC BIOS.
@@ -497,6 +529,7 @@ static const KeyboardXlat plainXlatSeed[] = {
 //
 static const KeyboardXlat shiftXlatSeed[] = {
   { kbIns,   kbShiftIns },
+  { kbDel,   kbShiftDel },
   { kbTab,   kbShiftTab },
   { kbF1,    kbShiftF1  },
   { kbF2,    kbShiftF2  },
@@ -1030,6 +1063,12 @@ static void selectPalette()
   TScreen::screenMode = TScreen::smCO80;
 }
 
+static inline int
+max(int a, int b)
+{
+	return (a > b) ? a : b;
+}
+
 /*
  * Show a warning message.
  */
@@ -1199,15 +1238,15 @@ setupGCs(Display *disp, Window win, Font font)
 {
 	int i, j;
 	XGCValues gcv;
-	XColor dummy, foreground[16], background[8];
+	XColor dummy, foreground[16], background[16];
 	Colormap colormap;
 
 	colormap = DefaultColormap(disp,  DefaultScreen(disp));
 
 	/*
-	 * Allocate the eight background colors.
+	 * Allocate the sixteen background colors.
 	 */	
-	for (i = 0; i < 8; i++) {
+	for (i = 0; i < 16; i++) {
 		if (XAllocNamedColor(x_disp, colormap, bgColor[i],
 			&background[i], &dummy) == 0)
 			error("Couldn't allocate color %s", bgColor[i]);
@@ -1233,7 +1272,7 @@ setupGCs(Display *disp, Window win, Font font)
 	for (i = 0; i < 16; i++) {
 		for (j = 0; j < 16; j++) {
 			gcv.foreground = foreground[j].pixel;
-			gcv.background = background[i%8].pixel;
+			gcv.background = background[i].pixel;
 			characterGC[i * 16 + j] = XCreateGC(
 				disp,
 				win,
@@ -1293,7 +1332,7 @@ TScreen::TScreen()
 	p = getenv("HOME");
 	if (p != NULL) {
 		char rdbFilename[PATH_MAX];
-		snprintf(rdbFilename, sizeof(rdbFilename), "%s/.Xdefaults", p);
+		qsnprintf(rdbFilename, sizeof(rdbFilename), "%s/.Xdefaults", p);
 		loadXResources(rdbFilename);
 	}
 		
@@ -1339,7 +1378,7 @@ TScreen::TScreen()
 
 	char default_geometry[80];
 
-	snprintf(default_geometry, sizeof(default_geometry),
+	qsnprintf(default_geometry, sizeof(default_geometry),
 		"%dx%d+%d+%d", DEFAULT_GEOMETRY_WIDTH,
 		DEFAULT_GEOMETRY_HEIGHT, 0, 0);
 
@@ -1737,40 +1776,36 @@ void TScreen::writeRow(int dst, ushort *src, int len)
  * Expands a path into its directory and file components.
  */
 
-void expandPath(const char *path, char *dir, char *file)
+void expandPath(const char *path,
+                char *dir, size_t dirsize,
+                char *file, size_t filesize)
 {
-        char *tag = strrchr(path, '/');
+    /* the path is in the form /dir1/dir2/file ? */
+    const char *tag = strrchr(path, '/');
+    size_t n;
 
-        /* the path is in the form /dir1/dir2/file ? */
-
-        if (tag != NULL)
-        {
-                strcpy(file, tag + 1);
-                strncpy(dir, path, tag - path + 1);
-                dir[tag - path + 1] = '\0';
-        }
-        else
-        {
-                /* there is only the file name */
-
-                strcpy(file, path);
-                dir[0] = '\0';
-        }
+    if(tag) {
+      n = ++tag - path;
+      if ( ssize_t(dirsize) > 0 )
+      {
+        if ( n >= dirsize )
+          n = dirsize-1;
+        memcpy(dir, path, n);
+      }
+    } else {  // only file name
+      n = 0;
+      tag = path;
+    }
+    if ( ssize_t(dirsize) > 0 )
+      dir[n] = '\0';
+    qstrncpy(file, tag, filesize);
 }
-
-void fexpand(char *path)
+void fexpand(char *path, size_t pathsize)
 {
-        char dir[PATH_MAX];
-        char file[PATH_MAX];
-        char oldPath[PATH_MAX];
+	char resolved[PATH_MAX];
 
-        expandPath(path, dir, file);
-        getcwd(oldPath, sizeof(oldPath));
-        chdir(dir);
-        getcwd(dir, sizeof(dir));
-        chdir(oldPath);
-        if (strcmp(dir, "/") == 0) sprintf(path, "/%s", file);
-        else sprintf(path, "%s/%s", dir, file);
+	if ( realpath(path, resolved) || errno == ENOENT )
+		qstrncpy(path, resolved, pathsize);
 }
 
 void TEventQueue::mouseInt() { /* no mouse... */ }

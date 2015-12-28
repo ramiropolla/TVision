@@ -4,6 +4,10 @@
 #
 
 #
+#   Set the variable "IDA" to point to the directory where the IDA SDK is
+#   located.  (make IDA=...)
+
+#
 #	Please note that default .CFG files define NO_TV_STREAMS for
 #	TVision w/o streams.
 #
@@ -15,17 +19,19 @@
 #		- use snprintf() function (see msgbox.cpp)
 #
 
+ifndef IDA
+IDA=IDA_variable_not_set/
+endif
+
+include $(IDA)allmake.unx
+
 CCPLUS=g++
-O=.o
-B=
-A=.a
-CFLAGS = -D__LINUX__ -I/usr/X11R6/include -I../include -D__NOROW__ -D__RUS__ -D__IDA__ -DNO_TV_STREAMS
+CFLAGS = -D__LINUX__ -I/usr/X11R6/include -I../include -D__NOROW__ -D__RUS__ -D__IDA__ -DNO_TV_STREAMS -I$(IDA)include
 				# see tscreen.cpp for the use of __NOROW__
 				# __RUS__ changes some characters to russian
 				#
 # Uncomment to build under Apple's MacOS X.
 #CFLAGS+=-D__MACOSX__ 
-
 
 OBJS=   prodir$(O)   \
         colorsel$(O) \
@@ -116,22 +122,22 @@ OBJS_XTERM= $(OBJS) linux$(O)
 OBJS_XWIN=  $(OBJS) linuxx$(O)
 
 
-.cpp.o:
-	$(CCPLUS) -c $(CFLAGS) $<
-
+DL=-ldl
 EXPORTS_DEF=tvision.script
-all: $(R)libtvision.so
+
+all: $(R)libtvision.so $(R)libtvisionx.so
+
 $(R)libtvision.so: $(OBJS_XTERM) $(EXPORTS_DEF)
-	$(CCPLUS) -shared -o $@ $(EXPORTS_DEF) $(OBJS_XTERM) -ldl --no-undefined
+	$(CCPLUS) -shared $(OUTSW) $@ $(EXPORTS_DEF) $(OBJS_XTERM) $(DL) --no-undefined $(L)pro$(A)
 $(R)libtvisionx.so: $(OBJS_XWIN) $(EXPORTS_DEF)
-	$(CCPLUS) -shared -o $@ $(EXPORTS_DEF) $(OBJS_XWIN) -lX11 -ldl --no-undefined \
-	-L/usr/X11R6/lib
+	$(CCPLUS) -shared $(OUTSW) $@ $(EXPORTS_DEF) $(OBJS_XWIN) -lX11 $(DL) --no-undefined \
+	-L/usr/X11R6/lib $(L)pro$(A)
 
 ./hello: hello$(O) $(OBJS_XTERM)
-	$(CCPLUS) -o $@ hello$(O) $(OBJS_XTERM) -ldl
+	$(CCPLUS) $(OUTSW) $@ hello$(O) $(OBJS_XTERM) $(DL)
 
 ./hellox: hello$(O) $(OBJS_XWIN)
-	$(CCPLUS) -o $@ hello$(O) $(OBJS_XWIN) -L/usr/X11R6/lib -lX11
+	$(CCPLUS) $(OUTSW) $@ hello$(O) $(OBJS_XWIN) -L/usr/X11R6/lib -lX11
 
 #-----------------------------------------------------------------------
 hello$(O):          hello.cpp

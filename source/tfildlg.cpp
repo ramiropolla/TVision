@@ -50,13 +50,13 @@ TFileDialog::TFileDialog( const char *aWildCard,
                         ) :
     TDialog( TRect( 15, 1, 64, 21 ), aTitle ),
     TWindowInit( TFileDialog::initFrame ),
-    directory( 0 )
+    directory( NULL )
 {
     options |= ofCentered;
-    strcpy( wildCard, aWildCard );
+    qstrncpy( wildCard, aWildCard, sizeof(wildCard) );
 
     fileName = new TFileInputLine( TRect( 3, 3, 31, 4 ), MAXPATH );
-    strcpy( fileName->data, wildCard );
+    qstrncpy( fileName->data, wildCard, fileName->dataSize() );
     insert( fileName );
 
     insert( new TLabel( TRect( 2, 2, 3+cstrlen(inputName), 3 ),
@@ -139,14 +139,14 @@ static Boolean relativePath( const char *path )
 {
     if( path[0] == DIRCHAR )
         return False;
-#if __FAT__
+#ifdef __FAT__
     if( path[0] != EOS && path[1] == ':' )
         return False;
 #endif
     return True;
 }
 
-#if __FAT__
+#ifdef __FAT__
 static void noWildChars( char *dest, const char *src )
 {
     while( *src != EOS )
@@ -160,23 +160,29 @@ static void noWildChars( char *dest, const char *src )
 #endif
 
 #ifdef __MSDOS__
-static void trim( char *dest, const char *src )
+static void trim( char *dest, const char *src, size_t destsize )
 {
+  if ( ssize_t(destsize) > 0 )
+  {
     while( *src != EOS && isspace(uchar(*src)) )
         src++;
-    while( *src != EOS && !isspace(uchar(*src)) )
+    char *end = dest + destsize;
+    while( *src != EOS && !isspace(uchar(*src)) && dest < end )
         *dest++ = *src++;
+    if ( dest >= end )
+      dest--;
     *dest = EOS;
+  }
 }
 #else
-#define trim strcpy
+#define trim qstrncpy
 #endif
 
-void TFileDialog::getFileName( char *s )
+void TFileDialog::getFileName( char *str, size_t strsize )
 {
 char buf[2*MAXPATH];
 
-#if __FAT__
+#ifdef __FAT__
 char drive[MAXDRIVE];
 char path[MAXDIR];
 char name[MAXFILE];
@@ -189,18 +195,18 @@ char TExt[MAXEXT];
     {                                                            // +++ yjh
       getcwd(buf, sizeof(buf));                                  // +++ yjh
       if ( fileName->data[2] )                                   // +++ yjh
-        trim( buf + strlen(buf), fileName->data+1 );             // +++ yjh
+        trim( buf + strlen(buf), fileName->data+1, sizeof(buf)-strlen(buf) ); // +++ yjh
     }                                                            // +++ yjh
     else                                                         // +++ yjh
     {
-      trim( buf, fileName->data );
+      trim( buf, fileName->data, sizeof(buf) );
     }
     if( relativePath( buf ) == True )
         {
-        strcpy( buf, directory );
-        trim( buf + strlen(buf), fileName->data );
+        qstrncpy( buf, directory, sizeof(buf) );
+        trim( buf + strlen(buf), fileName->data, sizeof(buf)-strlen(buf) );
         }
-    fexpand( buf );
+    fexpand( buf, sizeof(buf) );
     fnsplit( buf, drive, path, name, ext );
 //    printf("split %s\n drive=%s,path=%s,name=%s,ext=%s\n",buf,drive,path,name,ext);
     if( (name[0] == EOS || ext[0] == EOS) && !isDir( buf ) )
@@ -222,15 +228,15 @@ char TExt[MAXEXT];
             }
         }
 #else
-  strcpy( buf, fileName->data );
+  qstrncpy( buf, fileName->data, sizeof(buf) );
   if( relativePath( buf ) == True )
   {
-    strcpy( buf, directory );
-    strcpy( buf + strlen(buf), fileName->data );
+    qstrncpy( buf, directory, sizeof(buf) );
+    qstrncpy( buf + strlen(buf), fileName->data, sizeof(buf)-strlen(buf) );
   }
-  fexpand( buf );
+  fexpand( buf, sizeof(buf) );
 #endif
-  strcpy( s, buf );
+  qstrncpy( str, buf, strsize );
 }
 
 void TFileDialog::handleEvent(TEvent& event)
@@ -253,23 +259,25 @@ void TFileDialog::handleEvent(TEvent& event)
 void TFileDialog::readDirectory()
 {
     char curDir[MAXPATH];
-#if __FAT__
-    if ( relativePath(wildCard) ) {
-//      fileList->readDirectory( wildCard );
-      getCurDir( curDir );
-    } else {
+#ifdef __FAT__
+    if ( relativePath(wildCard) )
+    {
+      getCurDir( curDir, sizeof(curDir) );
+    }
+    else
+    {
       char drive[MAXDRIVE], dir[MAXDIR], name[MAXFILE], ext[MAXEXT];
       fnsplit( wildCard, drive, dir, name, ext );
-      strcpy(curDir,drive);
-      strcat(curDir,dir);
-      strcpy(wildCard,name);
-      strcat(wildCard,ext);
+      qstrncpy(curDir, drive, sizeof(curDir));
+      qstrncat(curDir, dir, sizeof(curDir));
+      qstrncpy(wildCard, name, sizeof(wildCard));
+      qstrncat(wildCard, ext, sizeof(wildCard));
     }
 #else
-    getCurDir( curDir );
+    getCurDir( curDir, sizeof(curDir) );
 #endif
-    if( directory )
-        delete[] directory;
+    if ( directory != NULL )
+      delete[] directory;
     directory = newStr( curDir );
     fileList->readDirectory( directory, wildCard );
 }
@@ -284,9 +292,9 @@ void TFileDialog::setData( void *rec )
   }
 }
 
-void TFileDialog::getData( void *rec )
+void TFileDialog::getData( void *rec, size_t recsize )
 {
-    getFileName( (char *)rec );
+    getFileName( (char *)rec, recsize );
 }
 
 Boolean TFileDialog::checkDirectory( const char *str )
@@ -306,28 +314,28 @@ Boolean TFileDialog::valid(ushort command)
        return True;
 
   char fName[MAXPATH], name[MAXFILE];
-#if __FAT__
+#ifdef __FAT__
   char dir[MAXDIR];
 #endif
 
-  getFileName(fName);
+  getFileName(fName, sizeof(fName));
   if ( isWild(fName) )
   {
     char path[MAXPATH];
-#if __FAT__
+#ifdef __FAT__
     char drive[MAXDRIVE];
     char ext[MAXEXT];
     fnsplit( fName, drive, dir, name, ext );
-    strcpy( path, drive );
-    strcat( path, dir );
+    qstrncpy( path, drive, sizeof(path) );
+    qstrncat( path, dir, sizeof(path) );
 #else
-    expandPath(fName, path, name);
+    expandPath(fName, path, sizeof(path), name, sizeof(name));
 #endif
     if ( checkDirectory( path ) )
     {
       delete[] directory;
       directory = newStr( path );
-      strcpy( wildCard, name );
+      qstrncpy( wildCard, name, sizeof(wildCard) );
       if( command != cmFileInit ) fileList->select();
       fileList->readDirectory( directory, wildCard );
     }
@@ -339,7 +347,7 @@ Boolean TFileDialog::valid(ushort command)
     {
       delete[] directory;
       if ( fName[strlen(fName)-1] != DIRCHAR )
-        strcat( fName, SDIRCHAR );
+        qstrncat( fName, SDIRCHAR, sizeof(fName) );
       directory = newStr( fName );
       if ( command != cmFileInit )
         fileList->select();

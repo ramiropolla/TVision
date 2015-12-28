@@ -34,7 +34,7 @@ int TFileCollection::compare(void *key1, void *key2)
 {
     const char *name1 = getName( key1 );
     const char *name2 = getName( key2 );
-#if __FAT__
+#ifdef __FAT__
     int code = stricmp( name1, name2 );
 #else
     int code = strcmp( name1, name2 );

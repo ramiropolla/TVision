@@ -1,11 +1,13 @@
-#include <tvdir.h>
+#include <pro.h>
+#include <prodir.h>
 
 #ifdef __GNUC__
 
-#include <string.h>
 #include <errno.h>
 #include <dirent.h>
 #include <fnmatch.h>
+#include <string.h>
+#include <sys/stat.h>
 #ifdef __MACOSX__
 #include <stdlib.h>
 #else
@@ -19,53 +21,42 @@ inline dirent *getfile(ffblk *blk, int idx)
 }
 
 //--------------------------------------------------------------------------
-int findfirst(const char *fname, ffblk *blk, int attr)
+int ida_export findfirst(const char *fname, ffblk *blk, int attr)
 {
-  strncpy(blk->dirpath, fname, sizeof(blk->dirpath));
-  blk->dirpath[sizeof(blk->dirpath)-1] = '\0';
+  qstrncpy(blk->dirpath, fname, sizeof(blk->dirpath));
   char *file = strrchr(blk->dirpath, DIRCHAR);
   if ( file == NULL )
-    strcpy(blk->dirpath, ".");
+    qstrncpy(blk->dirpath, ".", sizeof(blk->dirpath));
   else
     *file++ = '\0';
 
   blk->filelist = NULL;
   blk->fileqty = scandir(blk->dirpath, (dirent ***)&blk->filelist, NULL, alphasort);
   blk->fileidx = 0;
-  strncpy(blk->pattern, file != NULL ? file : fname, sizeof(blk->pattern));
-  blk->pattern[sizeof(blk->pattern)-1] = '\0';
+  qstrncpy(blk->pattern, file != NULL ? file : fname, sizeof(blk->pattern));
   blk->attr = attr;
   return findnext(blk);
 }
 
 //--------------------------------------------------------------------------
-int findnext(ffblk *blk)
+int ida_export findnext(ffblk *blk)
 {
   while ( blk->fileidx < blk->fileqty )
   {
     dirent *de = getfile(blk, blk->fileidx++);
     int code = fnmatch(blk->pattern, de->d_name, FNM_PATHNAME|FNM_PERIOD|FNM_CASEFOLD);
-//    printf("pattern=%s name=%s code=%d %s\n", blk->pattern, de->d_name, code, strerror(code));
     if ( code == 0 )
     { // match
-      struct stat st;
+      qstatbuf st;
       char fullpath[QMAXPATH];
-      strcpy(fullpath, blk->dirpath);
-      char *end = strchr(fullpath, '\0');
-      if ( end[-1] != DIRCHAR )
-        *end++ = DIRCHAR;
-      strcpy(end, de->d_name);
-//      printf("stat: '%s'\n", fullpath);
-      if ( stat(fullpath, &st) != 0 )
-        return -1;
+      qmakepath(fullpath, sizeof(fullpath), blk->dirpath, de->d_name, NULL);
+      if ( qstat(fullpath, &st) != 0 )
+        continue;
 
-//      printf("isdir?\n");
       if ( (blk->attr & FA_DIREC) == 0 && S_ISDIR(st.st_mode) )
         continue;
 
-//      printf("all ok\n");
-      strncpy(blk->ff_name, de->d_name, sizeof(blk->ff_name));
-      blk->ff_name[sizeof(blk->ff_name)-1] = '\0';
+      qstrncpy(blk->ff_name, de->d_name, sizeof(blk->ff_name));
       blk->ff_attrib = st.st_mode;
       return 0;
     }
@@ -74,7 +65,7 @@ int findnext(ffblk *blk)
 }
 
 //--------------------------------------------------------------------------
-void findclose(ffblk *blk)
+void ida_export findclose(ffblk *blk)
 {
   for ( int i=0; i < blk->fileqty; i++ )
     free(((dirent**)blk->filelist)[i]);

@@ -96,8 +96,8 @@ const char *TStatusLine::hintSeparator = "\xB3 ";
 
 const char *TCheckBoxes::button = " [ ] ";
 
-TScrollChars TScrollBar::vChars = {30, 31, 177, 254, 178};
-TScrollChars TScrollBar::hChars = {17, 16, 177, 254, 178};
+TScrollChars TScrollBar::vChars = { char(30), char(31), char(177), char(254), char(178) };
+TScrollChars TScrollBar::hChars = { char(17), char(16), char(177), char(254), char(178) };
 
 const char *TButton::shadows = "\xDC\xDB\xDF";
 const char *TButton::markers = "[]";

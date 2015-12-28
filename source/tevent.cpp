@@ -536,11 +536,12 @@ static win32_trans_t alt_trans[] = {
   { kbAltIns        , VK_INSERT },
   { kbAltPgUp       , VK_PRIOR  },
   { kbAltPgDn       , VK_NEXT   },
-  { kbAltKDiv       ,           },	// i don't know the codes
-  { kbAltKMul       ,           },
-  { kbAltKSub       ,           },
-  { kbAltKAdd       ,           },
-  { kbAltKEnter     ,           },
+  { kbAltKDiv       , VK_OEM_2  },
+  { kbAltKMul       , VK_MULTIPLY },
+  { kbAltKSub       , VK_SUBTRACT },
+  { kbAltKAdd       , VK_ADD    },
+  { kbAltKEnter     , VK_RETURN },
+  { kbAltK5         , VK_CLEAR  },
   { 0               , 0         }
 };
 
@@ -571,13 +572,13 @@ static win32_trans_t ctrl_trans[] = {
   { kbCtrlTab       , VK_TAB     },
   { kbCtrlUp        , VK_UP      },
   { kbCtrlDown      , VK_DOWN    },
-  { kbCtrlKDiv      ,            },
-  { kbCtrlKMul      ,            },
-  { kbCtrlKSub      ,            },
-  { kbCtrlKAdd      ,            },
-  { kbCtrlK5        ,            },
-  { kbCtrlKIns      ,            },
-  { kbCtrlKDel      ,            },
+  { kbCtrlKDiv      , VK_OEM_2   },
+  { kbCtrlKMul      , VK_MULTIPLY },
+  { kbCtrlKSub      , VK_SUBTRACT },
+  { kbCtrlKAdd      , VK_ADD     },
+  { kbCtrlK5        , VK_CLEAR   },
+  { kbCtrlKIns      , VK_INSERT  },
+  { kbCtrlKDel      , VK_DELETE  },
   { 0               , 0          }
 };
 
@@ -608,6 +609,7 @@ static win32_trans_t shift_trans[] = {
   { kbPgUp          , VK_NUMPAD9 },
   { kbPgDn          , VK_NUMPAD3 },
   { kbEnd           , VK_NUMPAD1 },
+  { kbShiftK5       , VK_NUMPAD5 },
   { 0               , 0          }
 };
 
@@ -640,6 +642,7 @@ static win32_trans_t plain_trans[] = {
   { kbF12           , VK_F12     },
   { kbGrayPlus      , VK_ADD     },
   { kbGrayMinus     , VK_SUBTRACT},
+  { kbK5            , VK_CLEAR   },
   { 0               , 0          }
 };
 
@@ -671,9 +674,9 @@ void TEvent::_getKeyEvent()
 
   uchar vk = irp->Event.KeyEvent.wVirtualKeyCode;
   ushort tk;
-       if ( shift & kbShift     ) tk = translate_vkey(shift_trans, vk);
-  else if ( shift & kbCtrlShift ) tk = translate_vkey(ctrl_trans, vk);
+       if ( shift & kbCtrlShift ) tk = translate_vkey(ctrl_trans, vk);
   else if ( shift & kbAltShift  ) tk = translate_vkey(alt_trans, vk);
+  else if ( shift & kbShift     ) tk = translate_vkey(shift_trans, vk);
   else                            tk = translate_vkey(plain_trans, vk);
   if ( tk != 0 )     keyDown.keyCode = tk;
 }
@@ -698,7 +701,13 @@ void TEvent::getKeyEvent()
     while ( true )
     {
       _getKeyEvent();
-      if ( what != evKeyDown || mh.MacroGetNextKey == NULL ) return;
+      if ( what != evKeyDown || mh.MacroGetNextKey == NULL )
+      {
+#ifdef __NT__   // tell TPROGRAM.CPP that wait for characters
+        TThreads::macro_playing = 0;
+#endif
+        return;
+      }
       switch ( keyDown.keyCode )
       {
         case MacroStart:

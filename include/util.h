@@ -10,17 +10,12 @@
 #if !defined( __UTIL_H )
 #define __UTIL_H
 
-inline int min( int a, int b )
-{
-    return (a>b) ? b : a;
-}
+// Declarations of basic system independent functions
+// This comes from IDA Pro
 
-inline int max( int a, int b )
-{
-    return (a<b) ? b : a;
-}
+#include <pro.h>
 
-void fexpand( char * );
+void fexpand( char *path, size_t pathsize );
 
 unsigned long getTicks();
 // returns a value that can be used as a substitute for the DOS Ticker at [0040:006C]
@@ -29,15 +24,15 @@ unsigned char getShiftState();
 
 #ifndef __BORLANDC__
 int fnsplit(const char *__path,
-                            char *__drive,
-                            char *__dir,
-                            char *__name,
-                            char *__ext);
+            char *__drive,
+            char *__dir,
+            char *__name,
+            char *__ext);
 void fnmerge(char *__path,
-                            const char *__drive,
-                            const char *__dir,
-                            const char *__name,
-                            const char *__ext);
+             const char *__drive,
+             const char *__dir,
+             const char *__name,
+             const char *__ext);
 #define WILDCARDS 0x01
 #define EXTENSION 0x02
 #define FILENAME  0x04
@@ -45,10 +40,10 @@ void fnmerge(char *__path,
 #define DRIVE     0x10
 
 int getdisk(void);
-int getcurdir(int __drive, char *buffer);
 
 #endif
 
+int qgetcurdir(int __drive, char *buffer, size_t bufsize);
 char hotKey( const char *s );
 ushort ctrlToArrow( ushort );
 char getAltChar( ushort keyCode );
@@ -74,10 +69,15 @@ Boolean pathValid( const char *path );
 
 Boolean validFileName( const char *fileName );
 
-void getCurDir( char *dir );
+void getCurDir( char *dir, size_t dirsize );
 
 Boolean isWild( const char *f );
 
 
-void expandPath(const char *path, char *dir, char *file);
+void expandPath(const char *path,
+                char *dir,
+                size_t dirsize,
+                char *file,
+                size_t filesize);
+
 #endif  // __UTIL_H

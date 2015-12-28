@@ -38,16 +38,22 @@
 /*                                                                        */
 //-----------------------------------------------------------------------
 void TDrawBuffer::moveBuf( ushort indent, const void *source,
-                           ushort attr, ushort count )
+                           ushort attr, ushort _count )
 {
-  if (attr) {
-    for (unsigned int i=0; i<count; i++) {
-      data[indent+i]= ( ((unsigned char*) source)[i] & 0xFF)+(attr << 8);
-    }
-  } else {
-    for (unsigned int i=0; i<count; i++) {
-      data[indent+i]= ((unsigned char*) source)[i]+(data[indent+i] & 0xFF00);
-    }
+  ssize_t count = _count;
+  size_t offset = indent;
+  if ( offset+count > qnumber(data) )
+    count = qnumber(data)-offset;
+
+  if (attr)
+  {
+    for ( ssize_t i=0; i<count; i++)
+      data[offset++]= ( ((unsigned char*) source)[i] & 0xFF)+(attr << 8);
+  }
+  else
+  {
+    for ( ssize_t i=0; i<count; i++)
+      data[offset++]= ((unsigned char*) source)[i]+(data[indent+i] & 0xFF00);
   }
 }
 
@@ -69,20 +75,27 @@ void TDrawBuffer::moveBuf( ushort indent, const void *source,
 /*                                                                        */
 /*------------------------------------------------------------------------*/
 
-void TDrawBuffer::moveChar( ushort indent, char c, ushort attr, ushort count )
+void TDrawBuffer::moveChar( ushort indent, char c, ushort attr, ushort _count )
 {
-  if (attr && c) {
-    for (unsigned int i=0; i<count; i++) {
-      data[indent+i]= ((unsigned char) c)+(attr << 8);
-    }
-  } else if (c) {
-    for (unsigned int i=0; i<count; i++) {
-      data[indent+i]= ((unsigned char) c)+(data[indent+i] & 0xFF00);
-    }
-  } else { // change attribute byte only
-    for (unsigned int i=0; i<count; i++) {
-      data[indent+i]= (attr << 8)+(data[indent+i] & 0x00FF);
-    }
+  ssize_t count = _count;
+  size_t offset = indent;
+  if ( offset+count > qnumber(data) )
+    count = qnumber(data)-offset;
+
+  if (attr && c)
+  {
+    for ( ssize_t i=0; i<count; i++)
+      data[offset++]= ((unsigned char) c)+(attr << 8);
+  }
+  else if (c)
+  {
+    for ( ssize_t i=0; i<count; i++)
+      data[offset++]= ((unsigned char) c)+(data[indent+i] & 0xFF00);
+  }
+  else  // change attribute byte only
+  {
+    for ( ssize_t i=0; i<count; i++)
+      data[offset++]= (attr << 8)+(data[indent+i] & 0x00FF);
   }
 }
 
@@ -107,10 +120,12 @@ void TDrawBuffer::moveChar( ushort indent, char c, ushort attr, ushort count )
 
 void TDrawBuffer::moveCStr( ushort indent, const char *str, ushort attrs )
 {
-  int offset=0;
-  for (int i=0; str[i]; i++) {
-    if (str[i]=='~') attrs=(attrs>>8)+((attrs & 0xFF)<<8);
-    else data[indent+offset++]= ((unsigned char) (str[i]) ) + ((attrs&0xFF)<<8);
+  for ( size_t i=0; indent < qnumber(data) && str[i]; i++ )
+  {
+    if ( str[i]=='~' )
+      attrs = (attrs>>8)+((attrs & 0xFF)<<8);
+    else
+      data[indent++] = ((unsigned char) (str[i]) ) + ((attrs&0xFF)<<8);
   }
 }
 
@@ -135,8 +150,8 @@ void TDrawBuffer::moveCStr( ushort indent, const char *str, ushort attrs )
 void TDrawBuffer::moveStr( ushort indent, const char *str, ushort attr )
 {
     attr <<= 8;
-    for (int i=0; *str != '\0'; i++ )
-      data[indent+i]= (unsigned char)(*str++) + attr;
+    while ( indent < qnumber(data) && *str != '\0' )
+      data[indent++] = (unsigned char)(*str++) + attr;
 }
 
 /*------------------------------------------------------------------------*/

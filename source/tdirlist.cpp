@@ -38,10 +38,9 @@ TDirListBox::~TDirListBox()
       destroy( list() );
 }
 
-void TDirListBox::getText( char *text, int item, int maxChars )
+void TDirListBox::getText( char *text, int item, size_t textsize )
 {
-        strncpy( text, list()->at(item)->text(), maxChars );
-        text[maxChars] = '\0';
+        qstrncpy( text, list()->at(item)->text(), textsize );
 }
 
 void TDirListBox::handleEvent( TEvent& event )
@@ -64,45 +63,41 @@ Boolean TDirListBox::isSelected( int item )
 
 void TDirListBox::showDrives( TDirCollection *dirs )
 {
-#if __FAT__
+#ifdef __FAT__
     Boolean isFirst = True;
     char oldc[5];
-    strcpy( oldc, "0:" SDIRCHAR );
-    for( char c = 'A'; c <= 'Z'; c++ )
+    qstrncpy( oldc, "0:" SDIRCHAR, sizeof(oldc) );
+    for ( char c = 'A'; c <= 'Z'; c++ )
+    {
+      if ( c < 'C' || driveValid( c ) )
+      {
+        if ( oldc[0] != '0' )
         {
-        if( c < 'C' || driveValid( c ) )
-            {
-            if( oldc[0] != '0' )
-                {
-                char s[ 16 ];
-                if( isFirst )
-                    {
-                    strcpy( s, firstDir );
-                    s[ strlen(firstDir) ] = oldc[0];
-                    s[ strlen(firstDir)+1 ] = EOS;
-                    isFirst = False;
-                    }
-                else
-                    {
-                    strcpy( s, middleDir );
-                    s[ strlen(middleDir) ] = oldc[0];
-                    s[ strlen(middleDir)+1 ] = EOS;
-                    }
-                dirs->insert( new TDirEntry( s, oldc ) );
-                }
-            if( c == getdisk() + 'A' )
-                cur = dirs->getCount();
-            oldc[0] = c;
-            }
+          char s[ 16 ];
+          char drv[2];
+          drv[0] = oldc[0];
+          drv[1] = '\0';
+          const char *dirsign = isFirst ? firstDir : middleDir;
+          qstrncpy( s, dirsign, sizeof(s) );
+          qstrncat( s, drv, sizeof(s) );
+          isFirst = False;
+          dirs->insert( new TDirEntry( s, oldc ) );
         }
+        if ( c == getdisk() + 'A' )
+          cur = dirs->getCount();
+        oldc[0] = c;
+      }
+    }
     if( oldc[0] != '0' )
-        {
-        char s[ 16 ];
-        strcpy( s, lastDir );
-        s[ strlen(lastDir) ] = oldc[0];
-        s[ strlen(lastDir)+1 ] = EOS;
-        dirs->insert( new TDirEntry( s, oldc ) );
-        }
+    {
+      char s[ 16 ];
+      char drv[2];
+      drv[0] = oldc[0];
+      drv[1] = '\0';
+      qstrncpy( s, lastDir, sizeof(s) );
+      qstrncat( s, drv, sizeof(s) );
+      dirs->insert( new TDirEntry( s, oldc ) );
+    }
 #else
     (void)dirs;
 #endif
@@ -115,25 +110,25 @@ void TDirListBox::showDirs( TDirCollection *dirs )
 
     char buf[2*MAXPATH];
     memset( buf, ' ', sizeof( buf ) );
-    char *name = buf + sizeof(buf) - MAXPATH;
+    char *bufend = buf + sizeof(buf);
+    char *const name = bufend - MAXPATH;
 
     char *org = name - strlen(pathDir);
-    strcpy( org, pathDir );
+    qstrncpy( org, pathDir, bufend-org );
 
     char *curDir = dir;
     char *end = dir + 3;
     char hold = *end;
     *end = EOS;         // mark end of drive name
-    strcpy( name, curDir );
+    qstrncpy( name, curDir, bufend-name );
     dirs->insert( new TDirEntry( org, name ) );
 
     *end = hold;        // restore full path
     curDir = end;
-    while( (end = strchr( curDir, DIRCHAR )) != 0 )
+    while( (end = strchr( curDir, DIRCHAR )) != NULL )
         {
         *end = EOS;
-        strncpy( name, curDir, size_t(end-curDir) );
-        name[size_t(end-curDir)] = EOS;
+        memcpy( name, curDir, end-curDir+1 );
         dirs->insert( new TDirEntry( org - indent, dir ) );
         *end = DIRCHAR;
         curDir = end+1;
@@ -144,9 +139,11 @@ void TDirListBox::showDirs( TDirCollection *dirs )
 
     end = strrchr( dir, DIRCHAR );
     char path[MAXPATH];
-    strncpy( path, dir, size_t(end-dir+1) );
-    end = path + unsigned(end-dir)+1;
-    strcpy( end, "*" );
+    char *pathend = path + sizeof(path);
+    size_t len = end-dir+1;
+    memcpy( path, dir, len );
+    end = path + len;
+    qstrncpy( end, "*",  pathend-end);
 
     Boolean isFirst = True;
     ffblk ff;
@@ -162,8 +159,8 @@ void TDirListBox::showDirs( TDirCollection *dirs )
                 }
             else
                 memcpy( org, middleDir, strlen(middleDir)+1 );
-            strcpy( name, ff.ff_name );
-            strcpy( end, ff.ff_name );
+            qstrncpy( name, ff.ff_name, bufend-name );
+            qstrncpy( end, ff.ff_name, pathend-end );
             dirs->insert( new TDirEntry( org - indent, path ) );
             }
         res = findnext( &ff );
@@ -187,7 +184,7 @@ void TDirListBox::showDirs( TDirCollection *dirs )
 
 void TDirListBox::newDirectory( const char *str )
 {
-    strcpy( dir, str );
+    qstrncpy( dir, str, sizeof(dir) );
     TDirCollection *dirs = new TDirCollection( 5, 5 );
     dirs->insert( new TDirEntry( drives, drives ) );
     if( strcmp( dir, drives ) == 0 )

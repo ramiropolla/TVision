@@ -33,9 +33,12 @@
 
 #include "helpbase.h"
 #include "util.h"
-
-
 #include <sys/stat.h>
+#ifdef __IDA__
+#include <help.h>
+#endif
+
+const char *tv_dynhelp;   // 02.08.98: dynamic help message for forms
 
 TCrossRefHandler crossRefHandler = notAssigned;
 
@@ -108,6 +111,8 @@ void THelpTopic::addCrossRef( TCrossRef ref )
     crossRefs = p;
     crossRefPtr = crossRefs + numRefs;
     *crossRefPtr = ref;
+    crossRefPtr->loc.x = -1;
+    crossRefPtr->loc.y = -1;
     ++numRefs;
 }
 
@@ -135,38 +140,40 @@ void THelpTopic::addParagraph( TParagraph *p )
 void THelpTopic::getCrossRef( int i, TPoint& loc, uchar& length,
          int& ref )
 {
-    int oldOffset, curOffset, offset, paraOffset;
-    TParagraph *p;
-    int line;
     TCrossRef *crossRefPtr;
 
-    paraOffset = 0;
-    curOffset = 0;
-    oldOffset = 0;
-    line = 0;
-    crossRefPtr = crossRefs + i;
-    offset = crossRefPtr->offset;
-    p = paragraphs;
-    while (paraOffset + curOffset < offset)
-        {
-        char lbuf[maxViewWidth];
-        oldOffset = paraOffset + curOffset;
-        wrapText(p->text, p->size, curOffset, p->wrap, lbuf, sizeof(lbuf));
-        ++line;
-        if (curOffset >= p->size)
-            {
+    if ( crossRefs[0].loc.x == -1 ) {   // build cross-ref locations
+      int paraOffset = 0;
+      int curOffset = 0;
+      int oldOffset = 0;
+      int line = 0;
+      TParagraph *p = paragraphs;
+      crossRefPtr = crossRefs;
+      for ( int j=0; j < numRefs; j++,crossRefPtr++ ) {
+        int offset = crossRefPtr->offset;
+        while (paraOffset + curOffset < offset) {
+        char buffer[maxViewWidth];
+          oldOffset = paraOffset + curOffset;
+        wrapText(p->text, p->size, curOffset, p->wrap, buffer, sizeof(buffer));
+          ++line;
+          if (curOffset >= p->size) {
             paraOffset += p->size;
             p = p->next;
             curOffset = 0;
-            }
+          }
         }
-    loc.x = offset - oldOffset - 1;
-    loc.y = line;
+        crossRefPtr->loc.x = offset - oldOffset - 1;
+        crossRefPtr->loc.y = line;
+      }
+    }
+
+    crossRefPtr = crossRefs + i;
     length = crossRefPtr->length;
     ref = crossRefPtr->ref;
+    loc = crossRefPtr->loc;
 }
 
-char *THelpTopic::getLine( int line, char *buffer, int buflen )
+char *THelpTopic::getLine( int line, char *buffer, size_t bufsize )
 {
     int offset, i;
     TParagraph *p;
@@ -190,9 +197,8 @@ char *THelpTopic::getLine( int line, char *buffer, int buflen )
     {
         while (offset < p->size)
         {
-            char lbuf[maxViewWidth];
             --line;
-            strncpy(buffer, wrapText(p->text, p->size, offset, p->wrap, lbuf, sizeof(lbuf)), buflen);
+            wrapText(p->text, p->size, offset, p->wrap, buffer, bufsize);
             if (line == 0)
                 {
                 lastOffset = offset;
@@ -220,17 +226,15 @@ int THelpTopic::numLines()
     offset = 0;
     lines = 0;
     p = paragraphs;
-    while (p != 0)
-        {
-        offset = 0;
-        while (offset < p->size)
-            {
-            char lbuf[maxViewWidth];
-            ++lines;
-            wrapText(p->text, p->size, offset, p->wrap, lbuf, sizeof(lbuf));
-            }
-        p = p->next;
-        }
+    while (p != 0) {
+      offset = 0;
+      while (offset < p->size) {
+        char buffer[maxViewWidth];
+        ++lines;
+        wrapText(p->text, p->size, offset, p->wrap, buffer, sizeof(buffer));
+      }
+      p = p->next;
+    }
     return lines;
 }
 
@@ -269,10 +273,11 @@ void THelpTopic::setNumCrossRefs( int i )
 
 void THelpTopic::setWidth( int aWidth )
 {
+    if ( numRefs > 0 ) crossRefs[0].loc.x = -1;
     width = aWidth;
 }
 
-static Boolean isBlank( char ch )
+inline Boolean isBlank( char ch )
 {
     if (isspace(uchar(ch)))
         return True;
@@ -280,7 +285,7 @@ static Boolean isBlank( char ch )
         return False;
 }
 
-int scan( char *p, int offset, char c)
+inline int scan( char *p, int offset, char c)
 {
     char *temp1, *temp2;
 
@@ -290,54 +295,46 @@ int scan( char *p, int offset, char c)
        return maxViewWidth;
     else
        {
-       if ((size_t)(temp2 - temp1) <= maxViewWidth )
-         return (int) (temp2 - temp1) + 1;
+       if ((temp2 - temp1) <= maxViewWidth )
+         return (temp2 - temp1) + 1;
        else
          return maxViewWidth;
        }
 }
 
-void textToLine( void *text, int offset, int length, char *line )
-{
-    strncpy(line, (char *)text+offset, length);
-    line[length] = 0;
-}
-
-char *THelpTopic::wrapText( char *text, int size, int& offset, Boolean wrap,
-                            char *lineBuf, int lineBufLen )
+char *THelpTopic::wrapText( char *text, int size,
+          int& offset, Boolean wrap, char *line, size_t lineBufLen )
 {
     int i;
 
     i = scan(text, offset, '\n');
-    if (i + offset > size )
-        i = size - offset;
-    if ((i >= width) && (wrap == True))
-        {
-        i = offset + width;
-        if (i > size)
-            i = size;
-        else
-            {
-            while((i > offset) && !(isBlank(text[i])))
-                --i;
-            if (i == offset) {
-                i = offset + width;
-                while ( (i < size) && !isBlank(text[i]) )
-                    ++i;
-                if ( i < size ) ++i;        // skip Blank
-             }
-            else
-                ++i;
-            }
-        if (i == offset)
-        i = offset + width;
-        i -= offset;
+    if (i + offset > size ) i = size - offset;
+    if ( (i >= width) && wrap ) {
+      i = offset + width;
+      if ( i > size ) {
+        i = size;
+      } else {
+        while( (i > offset) && !(isspace((uchar)text[i])) )
+          --i;
+        if ( i == offset ) {
+          i = offset + width;
+          while ( (i < size) && !isspace((uchar)text[i]) )
+            ++i;
+          if ( i < size ) ++i;        // skip Blank
+        } else {
+          ++i;
         }
-    textToLine(text, offset, min(i,lineBufLen), lineBuf);
-    if (lineBuf[min(strlen(lineBuf) - 1, (size_t)lineBufLen)] == '\n')
-        lineBuf[min(strlen(lineBuf) - 1, (size_t)lineBufLen)] = 0;
-    offset += min(i,lineBufLen);
-    return lineBuf;
+      }
+      if ( i == offset ) i = offset + width;
+      i -= offset;
+    }
+    qstrncpy(line, text+offset, qmin(i+1,lineBufLen));
+    // remove the last '\n'
+    size_t len = strlen(line);
+    offset += len;
+    if ( len > 0 && line[len-1] == '\n' )
+      line[--len] = '\0';
+    return line;
 }
 
 // THelpIndex
@@ -659,6 +656,9 @@ void notAssigned( opstream& , int )
 
 //--------------------------------------------------------------------------
 #else   // ifndef NO_TV_STREAMS
+
+#ifndef __IDA__
+
 void THelpTopic::readParagraphs(FILE *fp)
 {
     ushort i, size;
@@ -833,11 +833,125 @@ void THelpFile::putTopic( THelpTopic *topic )
     modified = True;
 }
 
+#else   // The following code is for IDA which does not use TVision help files
+
+THelpFile::THelpFile( FILE * )
+{
+}
+
+THelpFile::~THelpFile(void)
+{
+}
+
+extern char *ActionKey(const char *str);
+
+// return the new text (possibly reallocated, if not enough space in the original buffer)
+static char *addxrefs( THelpTopic *topic, char *text, size_t textsize ) { /* ig 22.04.93 */
+  char *base = text;
+  char *tend = text + textsize;
+  int base_size = strlen(base) + 1;
+  while ( (text=strchr(text,'@')) != NULL ) {
+    int y;
+    text++;
+    if ( text[0] == '<' ) {                     /* User function, 07.11.93 */
+      char *end = strchr(text,'>');
+      if ( end != NULL ) {
+        *end++ = '\0';
+        char *actionkey = ActionKey(text+1);
+        int resize = text + strlen(actionkey) - end; // how many bytes must we add to the string ?
+        if (resize > 0) // if the buffer needs resizing,
+        {
+          char *base_old = base;
+          // resize it
+          base_size += resize;
+          base = (char*) realloc(base, base_size);
+          // adjust all pointers to point in this new resized buffer
+          text = base + (text - base_old);
+          end  = base + (end  - base_old);
+          memmove(end+resize, end, strlen(end)+1); // shift to the right, to create some space in the buffer
+          memcpy(text-1, actionkey, strlen(actionkey)); // and insert the string (without its '\0')
+        }
+        else
+        {
+          text = qstpncpy(text-1,actionkey,tend-text+1);
+          memmove(text,end,strlen(end)+1);
+        }
+        continue;
+      }
+    }
+    if ( sscanf(text,"0:%d",&y) != 1 ) continue;
+    char *start = strchr(text,'[');
+    char *end = strchr(text,']');
+    if ( start == NULL || end == NULL ) continue;
+    int len = (int)(end-start)-1;
+    if ( len <= 0 || len > 80 ) continue;
+    start++;
+    end++;
+    memmove(text-1,start,len);
+    memmove(text-1+len,end,strlen(end)+1);
+    TCrossRef ref;
+    ref.ref    = y;
+    ref.offset = (int)(text-base);
+    ref.length = len;
+    topic->addCrossRef(ref);
+  }
+  return base;
+}
+
+THelpTopic *THelpFile::getTopic( int i )
+{
+    const char *ctext;
+    char buf[80];
+    while ( 1 ) {
+      switch ( i ) {
+        case 0:
+          ctext = NULL;
+          break;
+        case 0xFFFE:
+          ctext = tv_dynhelp;
+          break;
+        default:
+          ctext = ivalue1(i);
+          break;
+      }
+      if ( ctext == NULL ) {
+        qsnprintf(buf, sizeof(buf),
+                  "\nNo help available for this context.\n"
+                  "  (context number: %d)",
+                  i);
+        ctext = buf;
+      }
+      int tmp;
+      if ( sscanf(ctext,"@%d:%d",&tmp,&i) != 2 ) break;
+    }
+    char *text = newStr(ctext);
+    THelpTopic *topic = new THelpTopic;
+    TParagraph *para  = new TParagraph;
+    size_t len = strlen(text);
+    Boolean Wrap = False;
+    if ( strnicmp(text,"WRAP",4) == 0 ) {
+      int ext = ( text[4] == '\n' );
+      memmove(text,text+4+ext,len-4-ext+1);
+      Wrap = True;
+      char *ptr = text;
+      while ( (ptr=strchr(ptr+1,'\n')) != NULL ) {
+        if ( ptr[1] != ' ' && ptr[1] != '\n' && ptr[-1] != '\n' ) ptr[0] = ' ';
+      }
+    }
+    text = addxrefs(topic, text, len+1);
+    para->text = text;
+    para->size = strlen(text);
+    para->wrap = Wrap;
+    para->next = 0;
+    topic->addParagraph(para);
+    return topic;
+}
+#endif
+
 void notAssigned( FILE * , int )
 {
 }
 
-//--------------------------------------------------------------------------
 #endif  // ifndef NO_TV_STREAMS
 
 

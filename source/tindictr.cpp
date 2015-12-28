@@ -58,8 +58,8 @@ void TIndicator::draw()
     if( modified )
         b.putChar( 0, 15 );
 
-    sprintf(s, " %d:%d ", location.y+1, location.x+1);
-    b.moveCStr( 8-int(strchr(s, ':')-s), s, color);
+    qsnprintf(s, sizeof(s), " %d:%d ", location.y+1, location.x+1);
+    b.moveCStr( 8-(strchr(s, ':')-s), s, color);
     writeBuf(0, 0, size.x, 1, b);
 }
 

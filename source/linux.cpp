@@ -17,6 +17,8 @@
  *     TVOPT - the enduser flags. Has many subfields delimited by commas ','.
  *          noX11   - when libX11.so is not compatible
  *          noGPM   - when libgpm.so is not compatible
+ *                    also, when this eflag is present, and gpm does not work at
+ *                    the start of the program - do not trace its attachment
  *          ansi    -
  *               OR
  *          mono    - when the terminfo data of your display does not declare
@@ -102,6 +104,8 @@
 /* Modified by Ilfak Guilfanov, <ig@datarescue.com> */
 /* Rewritten by Yury Charon, <yjh@styx.cabel.net> */
 
+#define USE_DANGEROUS_FUNCTIONS
+
 #ifdef __LINUX__
 #define Uses_TButton
 #define Uses_TColorSelector
@@ -139,13 +143,12 @@
 #include <syslog.h>
 #include <dlfcn.h>    // dlopen/dlsym
 #include <poll.h>
+#include <sys/stat.h> // console switching
 #include <gpm.h>
 #include <curses.h>   // terminfo
 #include <term.h>
 #include <X11/Xlib.h> // X11console
 #undef buttons    // term.h
-
-#define qnumber(x) (sizeof(x)/sizeof(x[0]))
 
 //---------------------------------------------------------------------------
 /*
@@ -180,30 +183,38 @@
 /*
  * Expands a path into its directory and file components.
  */
-void expandPath(const char *path, char *dir, char *file)
+void expandPath(const char *path,
+                char *dir, size_t dirsize,
+                char *file, size_t filesize)
 {
     /* the path is in the form /dir1/dir2/file ? */
     const char *tag = strrchr(path, '/');
-    size_t  n;
+    size_t n;
 
     if(tag) {
       n = ++tag - path;
-      memcpy(dir, path, n = tag - path);
+      if ( ssize_t(dirsize) > 0 )
+      {
+        if ( n >= dirsize )
+          n = dirsize-1;
+        memcpy(dir, path, n);
+      }
     } else {  // only file name
       n = 0;
       tag = path;
     }
-    dir[n] = '\0';
-    strcpy(file, tag);
+    if ( ssize_t(dirsize) > 0 )
+      dir[n] = '\0';
+    qstrncpy(file, tag, filesize);
 }
 
 //---------------------------------------------------------------------------
-void fexpand(char *path)
+void fexpand(char *path, size_t pathsize)
 {
     char resolved[PATH_MAX];
 
-    if(realpath(path, resolved) || errno == ENOENT)
-        strcpy(path, resolved);
+    if ( realpath(path, resolved) || errno == ENOENT )
+      qstrncpy(path, resolved, pathsize);
 }
 
 //---------------------------------------------------------------------------
@@ -273,8 +284,8 @@ static struct {
         xmice_auto : 1,   // last generated xmice event must autocomplete
         reset_attr : 1,   // color and attributes must be fully set
         last_kbd   : 1,   // last generated event kbd (else - mouse)
-        doRepaint  : 1,   // should redraw the screen ?
         doResize   : 1,   // resize screen ?
+        app_screen : 1,   // screen switched to debugged application
         tty_owned  : 1;   // ttin/ttout handler mode is set
 }work;
 static uchar    last_page;      // 0-G0, 1-G1
@@ -290,13 +301,14 @@ static struct {
   ulong from; //   struct { ushort x, y; };
   ulong to;   //     struct { ushort x, y; };
   union {
-    uchar   cmd; // on3_off4;
+    uchar   cmd; // on=3, off=4;
     ushort  aligns;
   };
 }con_mou;
 #pragma pack()
 static ushort overlapXmice_code;
 static uchar  overlapXmice_mods;
+static uchar  remap_del_idx;
 //---
 static char xmou_cmd[] = "\E[?1002\0";
 #define XMOU_CMD_BYTE   xmou_cmd[sizeof(xmou_cmd)-2]
@@ -340,7 +352,7 @@ static void error(const char *format, ...)
 
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
-static char *qstrdup(const char *p)
+static char *qqstrdup(const char *p)
 {
     if((p = strdup(p)) == NULL) abort();
     return((char *)p);
@@ -357,38 +369,47 @@ static char *qmalloc(size_t len)
 
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
+static int qget_en; // reset when flush'ed
 static int qgetch(void)
 {
-    union {
-      int _dummy; //alignment for valgrind ONLY :(
-      uchar c;
-    };
-    (void)_dummy;
+    static uchar  buff[64];  // speed on sequences;
+    static int    fr;
 
-    for( ; ; )
-      switch(read(0, &c, 1)) {
-        case 1:
-          if(c) { // skip fillers
+    register uchar *p = buff;
+    register int i = fr;
+
+    if(i < qget_en) do {
+get_data:
+      ++fr;
+      if(p[i]) {
 #ifdef KBD_DEBUG
-            LOG("  getch: %02X(%c)", c, c);
+        LOG("  getch: %02X[pos=%d]", p[i], i);
 #endif
-            return(c);
-          }
-          continue;
-        case -1:
-          switch(errno) {
-            case EINTR: // for SIGWINCH
-            case EAGAIN:
-              return(EOF);
-            case EPIPE:
-              abort();  // mc and other subshell stopped
-            default:
-              break;
-          }
-          // PASS THRU
-        default:
-          error("TTY-read failed");
+        return(p[i]);
       }
+    }while(++i < qget_en);
+
+    switch(i = read(0, p, sizeof(buff))) {
+      case -1:
+        switch(errno) {
+          case EINTR: // for SIGWINCH
+          case EAGAIN:
+            return(EOF);
+          case EPIPE:
+            abort();  // mc and other subshell stopped
+          default:
+            break;
+        }
+        // PASS THRU
+      default:
+        if((size_t)i > sizeof(buff)) {
+      case 0:
+          error("TTY-read failed");
+        }
+        qget_en = i;
+        fr = i = 0;
+        goto get_data;
+    } // switch
 }
 
 //---------------------------------------------------------------------------
@@ -484,7 +505,7 @@ static void immediate_curs_moveto(int x, int y)
 //---------------------------------------------------------------------------
 /* FIXME: implemented only ANSI color/attr */
 // TEMP: (color can be switched to terminfo, but not attr's...) DBX
-#define ANSI_DEFAULT  "\e[;37;40m"  // sgr0 + color = white on black
+#define ANSI_DEFAULT  "\e[;39;49m"  // sgr0 + default color
 
 static char *set_color_page(uchar color, char *buf, uchar reverse, uchar page)
 {
@@ -578,8 +599,8 @@ static char *output_colored_char_to_buf(unsigned cc, char *buf)
     code  = (uchar)cc;
     if(code < 0x20 && !mode.alt866_font) {
       static const uchar arrow[] =
-            { 0x10, 0x11, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1D, 0x1E, 0x1F };
-      static const uchar ar_to[sizeof(arrow)+2] = "><o^v<>-^v\xFE";
+        { 0x10, 0x11, 0x13, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1D, 0x1E, 0x1F };
+      static const uchar ar_to[sizeof(arrow)+2] = "><!o^v><-^v\xFE";
 
       unsigned of = (uchar*)memchr(arrow, code, sizeof(arrow)) - arrow;
       if(of > sizeof(arrow)) of = sizeof(arrow);  // thick dot
@@ -748,19 +769,6 @@ static struct {
 }ctrl_map[0x20];
 
 //---------------------------------------------------------------------------
-const int kblNormal=0, kblShift=1, kblAltR=2, kblCtrl=4, kblAltL=8;
-
-static inline uchar state2tvstate(uchar state)
-{
-    uchar   out = 0;
-    if(state & kblShift) out |= kbShift;
-    if(state & kblAltL)  out |= kbLeftAlt;
-    if(state & kblAltR)  out |= kbRightAlt;
-    if(state & kblCtrl)  out |= kbCtrlShift;
-    return(out);
-}
-
-//---------------------------------------------------------------------------
 static unsigned findstateidx(unsigned state, uchar key)
 {
     const ushort  *nodes = states[state];
@@ -778,68 +786,31 @@ static unsigned findstateidx(unsigned state, uchar key)
 
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
-//***************************************************************************
-static int process_escape(int chr, int start_code)
+static int process_sequence(int chr, uchar start_code, unsigned idx)
 {
-    unsigned  idx;
-    uchar     mods = 0;
+    if(idx) goto next_char;
 
     // esc + escape sequence => alt + escape sequence
-    if((uchar)chr == '\e' && chr == start_code) {
-      if((int)(idx = qgetch()) == EOF) goto meta_char; // Alt+ESC
-      chr = idx;
-      mods = kblAltL;
+    if(!lastMods && (uchar)chr == '\e' && (uchar)chr == start_code) {
+      lastMods = kbLeftAlt;
+      if((int)(chr = qgetch()) == EOF) return(chr); //(-1) possible Alt+ESC
     }
 
     if((idx = findstateidx(ctrl_map[start_code].state, (uchar)chr)) == 0) {
-      if((uchar)start_code == '\e') {
-meta_char:
-        lastMods = kbLeftAlt;
+      if(lastMods || start_code != '\e') return(0); // illegal sequence
+      lastMods = kbLeftAlt;
+      return((unsigned)chr);
+    }
+
+    for( ; ; ) {
+      if(keymap[idx].islast) {
+        lastMods |= keymap[idx].mods;
+        return((unsigned)keymap[idx].tvcode);
       }
-      return(chr);
+      if((chr = qgetch()) == EOF) return(-(int)(idx+1));  // wait next char!
+next_char:
+      if((idx = findstateidx(keymap[idx].next, (uchar)chr)) == 0) return(0);
     }
-    do if(keymap[idx].islast) {
-      lastMods = state2tvstate(mods | keymap[idx].mods);
-      return(keymap[idx].tvcode);
-    }while(   (chr = qgetch()) != EOF
-           && (idx = findstateidx(keymap[idx].next, (uchar)chr)) != 0);
-    return(0);  // skip nointerpeted sequnce
-}
-
-//---------------------------------------------------------------------------
-/*
- * Gets information about modifier keys (Alt, Ctrl and Shift).  This can
- * be done only if the program runs on the system console or under X11.
- */
-uchar getShiftState(void)
-{
-    uchar shift = 0;
-    int   cmsk;
-
-    if(x11_display) {
-      unsigned  gmsk;
-      Window    root, child;
-      int       root_x, root_y, win_x, win_y;
-
-      if(!pXQueryPointer(x11_display, x11_window, &root, &child, &root_x,
-                         &root_y, &win_x, &win_y, &gmsk)) error("X11 error");
-      cmsk = gmsk;
-#if (ShiftMask != 1) || (ControlMask != 4)
-#error
-#endif
-#ifdef XTERM_DEBUG
-      LOG("XMASK=%X", gmsk);
-#endif
-      goto apply_mask;
-    }
-
-    cmsk = 6;    /* TIOCLINUX function #6 */
-    if(work.pc_console && ioctl(0, TIOCLINUX, &cmsk) != -1) {
-apply_mask:
-      shift = state2tvstate(cmsk);
-    } else shift = lastMods;
-
-    return(shift);
 }
 
 //---------------------------------------------------------------------------
@@ -937,34 +908,55 @@ static int apply_translation(int code, uchar *modifiers)
     uchar       uc, state = *modifiers;
 
     if((unsigned)code <= 0xFF) {
-      static const uchar  smk[4] = { 0x1B,  0x7F,   0x09,  0x0A    };
-      static const ushort smv[4] = { kbEsc, kbBack, kbTab, kbEnter };
-      static const ushort smc[3] = { kbCtrlBack, kbCtrlTab, kbCtrlEnter };
+      if((uchar)code < 0x20) {
+//        static const uchar  smk[4] = { 0x1B,  0x08,   0x09,  0x0A//, 0x7F };
+        static const ushort smv[5] =
+            { kbEsc, kbBack,     kbTab,     kbEnter,     kbDel };
+        static const ushort smc[4] =
+            {        kbCtrlBack, kbCtrlTab, kbCtrlEnter, kbCtrlDel };
 
-      if((p = (const uchar *)memchr(smk, code, sizeof(smk))) != NULL) {
-        code = smv[of = p - smk];
-        if(state) {
-          if(state & kbAltShift) {
-            if(of < 2) {
-              p = alts;
-              goto chg_code;
+        switch(of = code) {
+          default:
+            if(!state) {
+              if(ctrl_map[code].tvcode) {
+                *modifiers = ctrl_map[code].mods;
+                return(ctrl_map[code].tvcode);
+              }
+              *modifiers = kbCtrlShift;
             }
-            *modifiers = kbCtrlShift; // remap Alt+(Tab,Enter) => Ctrl (pty)
+          case 0x00:  // PARANOYA
+            break;
+#define REMAP_DEL2BS  (1 + (0x08 - 1))
+#define REMAP_DEL2DEL (4 + (0x08 - 1))
+make_bsORdel:
+            of = remap_del_idx;
+          case 0x08:
+          case 0x09:
+          case 0x0A:
+            of += 0x1B - (0x08 - 1);
+            //PASS THRU
+          case 0x1B:
+            of -= 0x1B;
+            if(state) {
+              if(state & kbAltShift) {
+                if(of < 2) {
+                  p = alts;
+                  goto chg_code;
+                }
+                *modifiers = kbCtrlShift; // remap Alt+(Tab,Enter,Del) => Ctrl (pty)
 do_ctrl:
-            return(smc[of-1]);
-          } else if(state & kbCtrlShift) {
-            if(of) goto do_ctrl;  // for console/X11
-          } else if(code == kbTab) return(kbShiftTab);
-        } // if(state)
-        return(code);
-      }
-
-      if(code < 0x20) {
-        if(!state && ctrl_map[code].tvcode) {
-          *modifiers = state2tvstate(ctrl_map[code].mods);
-          return(ctrl_map[code].tvcode);
-        }
-      } else if(code < 0x80) {
+                return(smc[of-1]);
+              } else if(state & kbCtrlShift) {
+                if(of) goto do_ctrl;  // for console/X11
+              } else switch(of) {
+                case 2: return(kbShiftTab);
+                case 4: return(kbShiftDel);
+                default: break;
+              }
+            } // if(state)
+            return(smv[of]);
+        } // switch
+      } else if((uchar)code < 0x80) {
         static const char c_k[] =
             "QWERTYUIOPASDFGHJKLZXCVBNM1234567890-= []:'`,.\\/";
 
@@ -982,12 +974,14 @@ do_ctrl:
           HB(kbAltDot), HB(kbAltBackslash), HB(kbAltSlash)
         };
 
+        if(code == 0x7F) goto make_bsORdel;
+
         if(!(state & kbAltShift)) return(code);
         of = (char*)memchr(c_k, toupper(code), sizeof(c_k)-1) - c_k;
         if(of >= sizeof(c_a)) return(code);
         p = c_a;
         goto chg_code;
-      }
+      } // if(code < 0x80)
 
       if((state & kbCtrlShift) || code < 0xA3 || mode.doscyr_ninp)
           return(code);
@@ -1015,7 +1009,7 @@ do_ctrl:
         else if(code == 0xB8) return(0xF1);
       }
       return(code);
-    }
+    } // if(code < 0xFF)
 
     if(!state || LB(code)) return(code);
 
@@ -1074,12 +1068,69 @@ static inline int char2scancode(uchar code)
       if(code <= 0xAF) code = dos2eng1[code-0x80];
       else if(code >= 0xE0 && code <= 0xF1-2) code = dos2eng2[code-0xE0];
       else return(0);
+    } else if(code < ' ') switch(code) {
+      default:
+        code += 'a' - 1;
+        //PASSTHRU
+      case 0x08:
+      case 0x09:
+      case 0x0D:
+      case 0x1B:
+      case 0x00:
+        break;
     } else code = (uchar)tolower(code);
 
     unsigned id = (uchar *)memchr(k2s, code, sizeof(scv)) - k2s;
     if(id >= sizeof(scv)) return(0);
 
     return(((unsigned)scv[id]) << 8);
+}
+
+//---------------------------------------------------------------------------
+static inline uchar state2tvstate(uchar state)
+{
+    uchar   out = 0;
+    if(state & 1) out |= kbShift;
+    if(state & 8) out |= kbLeftAlt;
+    if(state & 2) out |= kbRightAlt;
+    if(state & 4) out |= kbCtrlShift;
+    return(out);
+}
+
+//---------------------------------------------------------------------------
+/*
+ * Gets information about modifier keys (Alt, Ctrl and Shift).  This can
+ * be done only if the program runs on the system console or under X11.
+ */
+uchar getShiftState(void)
+{
+    uchar shift = 0;
+    int   cmsk;
+
+    if(x11_display) {
+      unsigned  gmsk;
+      Window    root, child;
+      int       root_x, root_y, win_x, win_y;
+
+      if(!pXQueryPointer(x11_display, x11_window, &root, &child, &root_x,
+                         &root_y, &win_x, &win_y, &gmsk)) error("X11 error");
+      cmsk = gmsk;
+#if (ShiftMask != 1) || (ControlMask != 4)
+#error
+#endif
+#ifdef XTERM_DEBUG
+      LOG("XMASK=%X", gmsk);
+#endif
+      goto apply_mask;
+    }
+
+    cmsk = 6;    /* TIOCLINUX function #6 */
+    if(work.pc_console && ioctl(0, TIOCLINUX, &cmsk) != -1) {
+apply_mask:
+      shift = state2tvstate(cmsk);
+    } else shift = lastMods;
+
+    return(shift);
 }
 
 //---------------------------------------------------------------------------
@@ -1105,7 +1156,7 @@ static void msSetEvent(TEvent &event)
 }
 
 //---------------------------------------------------------------------------
-static uchar create_xmouse_event(TEvent &ev, int event)
+static uchar create_xmouse_event(TEvent &ev, uchar xm_data[3])
 {
 #define MouseB1Down 0x20
 #define MouseB2Down 0x21
@@ -1116,13 +1167,12 @@ static uchar create_xmouse_event(TEvent &ev, int event)
 #define MouseMove   0x40
 
     TPoint  me;
-    int     whC, whF;
+    int     whC, whF, event;
 
-    if((whC = qgetch()) == EOF || (whF = qgetch()) == EOF) return(0);
-
-    if(event >= 0x60 || event < 0x20) return(0);  // B4 and B5 (or illegal code)
-    me.x = whC - 0x21;
-    me.y = whF - 0x21;
+    if(   (event = xm_data[0]) < 0x20
+       || event >= 0x60   // B4 and B5 (not applied)
+       || (me.x = xm_data[1] - 0x21) < 0
+       || (me.y = xm_data[2] - 0x21) < 0) return(0);
 
     whF = whC = 0;
     if(msev.mouse.where != me) whF |= meMouseMoved;
@@ -1199,14 +1249,22 @@ static void draw_pointer(void)
 }
 
 //---------------------------------------------------------------------------
-static void restart_gpm(int close_needed, ulong curTime)
+static uchar restart_gpm(signed char close_needed, ulong curTime)
 {
     Gpm_Connect   gc;
     char          *p, save = 0; // = for gcc bug
 
-    if(close_needed) pGpm_Close();
-    pfd_count   = 1;
-    con_mou.cmd = 4; // no redraw
+    switch(close_needed) {
+      default:
+        pGpm_Close();
+        //PASS THRU
+      case 0:
+        pfd_count   = 1;
+        con_mou.cmd = 4; // no redraw
+        //PASS THRU
+      case -1:
+        break;
+    }
 
     if((p = getenv("TERM")) != NULL) {
       save = *p;
@@ -1217,7 +1275,8 @@ static void restart_gpm(int close_needed, ulong curTime)
     gc.defaultMask  = 0;
     gc.eventMask    = ~0;
     if((pfd_data[1].fd = pGpm_Open(&gc, 0)) >= 0) {
-      LOG("GPM started");
+      if(close_needed == -1) goto stop_gpm; // init ONLY
+      if(!work.app_screen) LOG("GPM started");
       ++pfd_count;
       draw_pointer();     // hide pointer
       gpmReopenTimer.stop();
@@ -1225,11 +1284,16 @@ static void restart_gpm(int close_needed, ulong curTime)
 #ifdef MOUSE_DEBUG
       LOG("Can't connect to GPM!");
 #endif
-      if(!curTime) curTime = get_system_time();
-      gpmReopenTimer.set(curTime + DELAY_GPM_START_CHECK);
+      if(close_needed != -1) { // !init
+        if(!curTime) curTime = get_system_time();
+        gpmReopenTimer.set(curTime + DELAY_GPM_START_CHECK);
+      }
+      ++close_needed;   // as flag for init
+stop_gpm:
       pGpm_Close(); // remove gpm_tried flag :(
     }
     if(p) *p = save;
+    return(close_needed);
 }
 
 //---------------------------------------------------------------------------
@@ -1307,28 +1371,6 @@ static void xmouse_up(TEvent &event)
 /* Reads a key from the keyboard or mouse */
 static void get_key_mouse_event(TEvent &event, ulong curTime)
 {
-    static int    start_code;
-    static Timer  escTimer;
-
-    if(work.xmice_auto) return(xmouse_up(event));
-
-    event.what = evNothing;
-
-    int   code;
-    long  wait;
-
-    /*
-    * suspend until there some data in file descriptors.
-    * event_delay is maximum suspend time in milliseconds.
-    * if event_delay != 0 and esc-sequence recived we wait for the full sequence.
-    */
-
-    ulong top_time = curTime + TProgram::event_delay;
-rewait:
-    if((wait = escTimer.getLimit()) != -1) { // -1 not started
-      if((wait -= curTime) < 0) goto esc_drop;
-    }
-    if((ulong)wait > (ulong)TProgram::event_delay) wait = TProgram::event_delay;
     /* if working on the console and gpm is not present at start...*/
     if(gpmReopenTimer.isExpired(curTime)) restart_gpm(0, curTime);
 
@@ -1338,77 +1380,106 @@ rewait:
       ++con_mou.cmd;  // = 4 (off)
     }
 
-    lastMods = 0;
+    /* for xterm-emulator with only 1002 mode */
+    if(work.xmice_auto) return(xmouse_up(event));
+
+    lastMods    = 0;
+
+    uchar   start_code, xm_data[3];
+    int     code, wait, seq_stage;
+    /*
+    * suspend until there some data in file descriptors.
+    * event_delay is maximum suspend time in milliseconds.
+    * when sequence start - complete it irrespective of event_delay.
+    */
+    seq_stage   = 0;
+    start_code  = 0;  // only for drop gcc diagnostic :(
+    wait        = TProgram::event_delay;
+
+read_next:
     /* wait or check */
-    switch(poll(pfd_data, pfd_count, wait)) {
+    switch(code = poll(pfd_data, pfd_count, wait)) {
+      case -1:    // error
+        if(errno == EINTR) goto check_wait; // only SIGWINCH :)
+        //PASS THRU
       default:
+sys_err:
+        abort();  // system error
+
+      case 0:     // timeout
+        goto no_sequence;
+
+      case 2:
+      case 1:
         if(pfd_count > 1 && pfd_data[1].revents) {
           work.last_kbd = 0;
-          if(!create_gpm_event(event)) goto do_esc_check;
-          return;
+          if(create_gpm_event(event)) return;
+          if(!--code) goto check_wait;
         }
-        if(pfd_data[0].revents & POLLHUP)
-          abort();
+        if(code != 1) goto sys_err; // PARANOYA
+        if(pfd_data[0].revents & POLLHUP) goto sys_err;
         if(pfd_data[0].revents & POLLIN) {
-          if(MOUSE_SHOW && con_mou.cmd == 4) --con_mou.cmd; // redraw
-          code = qgetch();
-          if(code > 0) break; // -1 if EOF, 0 if cbrk/busy
+          if(con_mou.cmd == 4 && MOUSE_SHOW) --con_mou.cmd; // redraw
+          if((code = qgetch()) > 0) break; // -1 if EOF, 0 if cbrk/busy
         }
-        // PASS THRU
-      case 0:   // timeout
-do_esc_check:
-        if(!escTimer.isExpired(curTime = get_system_time())) goto no_symbol;
-esc_drop:
-        escTimer.stop();
-        code = start_code;
-        goto apply_symbol;
-      case -1:  // error
-        if(errno == EINTR) return;  // only SIGWINCH :)
-        abort();  // system error
-    }
+check_wait:
+        if(seq_stage) goto read_next;
+no_data:
+        if(  (wait = TProgram::event_delay) != 0
+          && (wait -= (get_system_time() - curTime)) > 0) goto read_next;
+        event.what = evNothing;
+        return;
+    } // switch(poll)
 
     /* see if there is data available */
-    if(escTimer.isRunning()) {
-      escTimer.stop();
-apply_escape:
-      switch(code = process_escape(code, start_code)) {
-        case kbMouse:
-          if((code = qgetch()) != EOF) {
-            if(!create_xmouse_event(event, code)) goto no_symbol_ts;
-            work.last_kbd = 0;
-            return;
-          }
-          if((code = overlapXmice_code) == 0) goto no_symbol_ts;
-          lastMods = overlapXmice_mods;
-        default:
-          break;
-        case 0:
-no_symbol_ts:
-          if(!wait || work.doResize) return;
-          if((curTime = get_system_time()) < top_time) goto rewait;
-          return;
+    if(seq_stage) {
+      if(seq_stage < 0) goto xm_next_char;
+apply_sequence:
+      if((code = process_sequence(code, start_code, seq_stage - 1)) == 0) {
+no_sequence:
+        switch(seq_stage) {
+          default:  // non-started sequence OR bad sequence
+            goto no_data;
+          case 1:
+            if(code && !lastMods) goto no_data; // !code - char, else Alt-Esc
+            code = start_code;
+            break;  // apply_symbol;
+          case -1:
+            if((code = overlapXmice_code) == 0) goto no_data;
+            lastMods = overlapXmice_mods;
+            break;  // apply_symbol;
+        }
+      } else if(code < 0) {
+        seq_stage = -code;
+        goto do_wait_next_seq;
+      } else if(code == kbMouse) {
+        seq_stage = 0;  // for delivered sequnce
+        while(--seq_stage >= -(int)sizeof(xm_data)) {
+          if((code = qgetch()) == EOF) goto do_wait_next_seq;
+xm_next_char:
+          xm_data[-seq_stage - 1] = (uchar)code;
+        }
+        if(!create_xmouse_event(event, xm_data)) goto no_data;
+        work.last_kbd = 0;
+        return;
       }
     } else if(   (uchar)code < 0x20
               && ctrl_map[code].state
               && !ctrl_map[code].tvcode) {
-      start_code = code;
-      code = qgetch();
-      if(code != EOF) goto apply_escape;
-      escTimer.set((curTime = get_system_time()) + DELAY_ESC);
-no_symbol:
-      if(wait && !work.doResize && curTime < top_time) goto rewait;
-      return;
+      start_code = (uchar)code;
+      ++seq_stage;  // = 1
+      if((code = qgetch()) != EOF) goto apply_sequence;
+do_wait_next_seq:
+      wait = DELAY_ESC;
+      goto read_next;
     }
 
-apply_symbol:
     uchar modifiers = getShiftState();
 #ifdef KBD_DEBUG
     LOG("KBDIN: code=%x mod=%x (last=%x)", code, modifiers, lastMods);
 #endif
-    if(code > 0x7F && mode.meta_8bit && (modifiers & kbLeftAlt)) {
+    if(code > 0x7F && mode.meta_8bit && (modifiers & kbLeftAlt))
       code &= 0x7F;
-      modifiers &= ~kbLeftAlt;
-    }
     work.last_kbd = 1;
     code = apply_translation(code, &modifiers);
     if((unsigned)code <= 0xFF) code |= char2scancode((uchar)code);
@@ -1426,23 +1497,28 @@ static void set_mouse_attach(char get);
 //---------------------------------------------------------------------------
 // try many times if the  system call is interrupted
 // it happens on X11
-static void set_tty_mode(struct termios *tm, int mode)
+static bool set_tty_attr(const struct termios *tm)
 {
     for(int i = 0; i < 10; i++) {
-      if(!tcsetattr(0, TCSAFLUSH, tm)) break;
-      if(errno != EINTR) goto bad;
+      if(!tcsetattr(0, TCSAFLUSH, tm)) return(true);
+      if(errno != EINTR) break;
       usleep(100);  // 0.1ms
     }
-    if(fcntl(0, F_SETFL, mode) == -1) {
-bad:
-      abort();
-    }
+    return(false);
 }
 
 //---------------------------------------------------------------------------
-static void reinit_screen(uchar crs_hide)
+static void set_tty_mode(const struct termios *tm, int mode)
 {
-    char  buf[512], *p;
+    if(!set_tty_attr(tm) || fcntl(0, F_SETFL, mode) == -1)
+      abort();
+    qget_en = 0;  // flush input buffer
+}
+
+//---------------------------------------------------------------------------
+static char *reinit_screen(uchar crs_hide, char *dbgbuf = NULL)
+{
+    char *p, buf[256];
 
     cursor_hide = crs_hide;
     last_page   = 0;
@@ -1450,19 +1526,17 @@ static void reinit_screen(uchar crs_hide)
     work.reset_attr = 1; // full set color/mode
 
     p = buf;
+    if(dbgbuf) p = dbgbuf;
     if(!mode.ansi_none) p = stpcpy(p, ANSI_DEFAULT);  // norm-attr/color
+    else if(dbgbuf) p = stpcpy(p, "\e[m");  // reset all modes
     if(pages_init)  p = tistr_copy(p, pages_init);    // enable alt charset
     if(page_G0)     p = tistr_copy(p, page_G0);       // set G0
     if(cur_invis)   p = tistr_copy(p, crs_hide ? cur_invis : cur_vis);
+    if(dbgbuf) return(p);
     p = tistr_copy(p, clear_scr); // blank screen
     p = curs_moveto(p, 0, TScreen::screenHeight-1);
     term_out(buf, p - buf);
-    if(!mode.ansi_none) p = stpcpy(p, ANSI_DEFAULT);  // norm-attr/color
-    if(page_G0) p = tistr_copy(p, page_G0); // set G0
-    if(cur_vis) p = tistr_copy(p, cur_vis);
-    p = tistr_copy(p, clear_scr); // blank screen
-    p = curs_moveto(p, 0, TScreen::screenHeight-1);
-    term_out(buf, p - buf);
+    return(NULL); // PARANOYA
 }
 
 //---------------------------------------------------------------------------
@@ -1513,7 +1587,6 @@ static void sigHandler(int signo)
 void TScreen::resume()
 {
     attach_tty();
-    work.doRepaint = 1;
 }
 
 //---------------------------------------------------------------------------
@@ -1553,7 +1626,7 @@ found:
 //---------------------------------------------------------------------------
 void TEvent::_getKeyEvent(void)
 {
-  if(!find_event_in_queue(true, this)) {
+  if(!work.app_screen && !find_event_in_queue(true, this)) {
     get_key_mouse_event(*this, get_system_time());
 
     if(what & evMouse) {
@@ -1566,7 +1639,7 @@ void TEvent::_getKeyEvent(void)
 //---------------------------------------------------------------------------
 void TEventQueue::getMouseEvent(TEvent &event)
 {
-  if(!find_event_in_queue(false, &event)) {
+  if(!work.app_screen && !find_event_in_queue(false, &event)) {
     if(work.xmice_auto) goto auto_up;
     if(work.last_kbd && msOldButtons) { // from non-liquidated keys (ida BUG)
       msAutoTimer.stop();
@@ -1587,31 +1660,44 @@ auto_up:
 }
 
 //---------------------------------------------------------------------------
+static bool apply_resize(void)
+{
+    winsize win;
+    int     col, row;
+
+    if(ioctl(0, TIOCGWINSZ, &win) == -1) abort();
+
+    work.doResize = 0;
+    signal(SIGWINCH, sigHandler);
+
+    col = range(win.ws_col, 4, maxViewWidth);
+    row = range(win.ws_row, 4, 100); // replace with a symbolic constant!
+
+    if(   TScreen::screenWidth == col
+       && TScreen::screenHeight == row) return(false);
+
+    TScreen::screenWidth  = col;
+    TScreen::screenHeight = row;
+    delete[] TScreen::screenBuffer;
+    TScreen::screenBuffer = new ushort[col * row];
+#ifdef WINCHG_DEBUG
+    LOG("screen resized to %dx%d", col, row);
+#endif
+    return(true);
+}
+
+//---------------------------------------------------------------------------
 /*
  * Gets an event from the queue.
  */
 void TScreen::getEvent(TEvent &event)
 {
     event.what = evNothing;
+    if(work.app_screen) return;
 
-    if(work.doResize) {
-      work.doResize = 0;
+    if(work.doResize && apply_resize()) {
       reinit_screen(cursor_hide);   // also blank the screen
-
-      winsize win;
-      if(   ioctl(0, TIOCGWINSZ, &win) != -1
-         && win.ws_col > 0 && win.ws_row > 0) {
-
-        screenWidth = range(win.ws_col, 4, maxViewWidth);
-        screenHeight = range(win.ws_row, 4, 100); // replace with a symbolic constant!
-        delete[] screenBuffer;
-        screenBuffer = new ushort[screenWidth * screenHeight];
-#ifdef WINCHG_DEBUG
-        LOG("screen resized to %dx%d", screenWidth, screenHeight);
-#endif
-        drawCursor(0); /* hide the cursor */
-      }
-      signal(SIGWINCH, sigHandler);
+      drawCursor(0); /* hide the cursor */
       event.message.command = cmSysResize;
       event.what = evCommand;
       return;
@@ -1651,7 +1737,7 @@ void TScreen::getEvent(TEvent &event)
  */
 void TScreen::makeBeep(void)
 {
-    if(bell_line) tistr_out(bell_line);
+    if(!work.app_screen && bell_line) tistr_out(bell_line);
 }
 
 //---------------------------------------------------------------------------
@@ -1674,7 +1760,7 @@ void TScreen::putEvent(TEvent &event)
  */
 void TScreen::drawCursor(int show)
 {
-    if(!show != cursor_hide) {
+    if(!work.app_screen && !show != cursor_hide) {
       cursor_hide ^= 1;
       if(show) immediate_curs_moveto(curX, curY);
       if(cur_invis) tistr_out(show ? cur_vis : cur_invis);
@@ -1687,6 +1773,8 @@ void TScreen::drawCursor(int show)
  */
 void TScreen::moveCursor(int x, int y)
 {
+    if(work.app_screen) return;
+
     immediate_curs_moveto(x, y);
     curX = x;
     curY = y;
@@ -1701,6 +1789,8 @@ void TScreen::writeRow(int dst, ushort *src, int len)
     static char outbuf[4096 + 2 + 200];
 
     register char *ptr, *top;
+
+    if(work.app_screen) return;
 
     ptr = outbuf;
     top = ptr + (sizeof(outbuf)-2 - 200);
@@ -1730,6 +1820,8 @@ void TEventQueue::mouseInt(void) { /* no mouse... */ }
 /* Show/Hide mouse */
 static void set_mouse_show(uchar show)
 {
+    if(work.app_screen) return;
+
 // really we show/unshow only GPM mouse. But when mouse is OFF,
 // we disable mouse reporting to minimize the number of events
     if(show == XMOU_CMD_BYTE || !XMOU_CMD_BYTE) return;
@@ -1767,6 +1859,7 @@ static void set_mouse_attach(char get)
       if(!get) {
         gpmReopenTimer.stop();  // PARANOYA
         if(pfd_count > 1) {
+          set_mouse_show('l');  // this needed for switch_screen
           --pfd_count;
           pGpm_Close();
         }
@@ -1807,6 +1900,127 @@ void TV_CDECL THWMouse::show(void)
 void TV_CDECL THWMouse::hide(void)
 {
     set_mouse_show('l');  // off
+}
+
+//---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+static size_t get_csize(void)
+{
+    winsize csize;
+
+    if(ioctl(0, TIOCGWINSZ, &csize) == -1) abort();
+    return(csize.ws_col * csize.ws_row * 2 + 4);
+}
+
+static int fd_ssave;  // -1 if xterm, /dev/vc/%c if console, 0 - others
+
+// 1 - application screen
+// 0 - TV screen
+// -1 - display the app screen and wait for a keyboard key, then switch back
+// -2 - prepare screen-switching
+// return: false if switching can't be realized or invalid status.
+bool TProgram::switch_screen(int to_user)
+{
+    static ssize_t  user_bfsz;
+    static void     *user_buf;
+    static termios  user_tios;
+
+    switch(to_user) {
+      case -2:
+        if(!fd_ssave) return(false);
+        free(user_buf);
+        user_buf = NULL;
+        user_bfsz = 0;
+        user_tios = old_tios;
+        return(true);
+
+      case -1:
+        if(user_bfsz) break;
+      default:  // PARANOYA
+        return(false);
+
+      case 0:
+      case 1:
+        if(!fd_ssave) return(false);  // PARANOYA
+        if((uchar)to_user == work.app_screen) return(true);
+        break;
+    }
+
+    ssize_t len;
+    char    *p, buff[256];
+
+    p = buff;
+    if(to_user) {
+      work.app_screen = 1;  // here for reinit_screen
+      // We can't save mouse mode
+      set_mouse_attach(0);  // detach mouse
+      if(fd_ssave == -1) p = stpcpy(p, "\e[?47l");  // alt-buffer off
+      if(to_user > 0) {
+        // We can't save current color mode and alt-page
+        p = reinit_screen(to_user < 0, p); // and set crs-stat (for first)
+        if(user_bfsz) p = stpcpy(p, "\e8"); // restore cursor
+      } else if(cur_invis) p = tistr_copy(p, cur_invis);
+      if(!user_bfsz) p = tistr_copy(p, clear_scr); // blank screen and set cursor top
+      if((len = p - buff) != 0) term_out(buff, len);
+      if(fd_ssave != -1 && user_bfsz) {
+        if((len = get_csize()) > user_bfsz) len = user_bfsz;
+        if(   lseek(fd_ssave, 0, SEEK_SET)
+           || write(fd_ssave, user_buf, len) != len) goto fatal;
+      }
+      if(to_user > 0) {
+        if(set_tty_attr(&user_tios)) goto done;
+fatal:
+        abort();
+      }
+      usleep(500000);
+      while(qgetch() != EOF) /* EMPTY LOOP */ ;
+      do usleep(100000); while(qgetch() == EOF);
+      usleep(100000);
+      while(qgetch() != EOF) /* EMPTY LOOP */ ;
+      p = buff;  // unification
+    } else { // to_user == 0
+      if(tcgetattr(0, &user_tios) || !set_tty_attr(&my_tios)) goto fatal;
+      p = stpcpy(p, "\e7"); // save_cursor
+    }
+    // ( to_user <= 0 )
+    if(fd_ssave == -1) {
+      p = stpcpy(p, "\e[?47h"); // alt-buffer on
+      user_bfsz |= 1; // as flag
+    } else {
+      if((len = get_csize()) != user_bfsz) {
+        user_bfsz = len;
+        free(user_buf);
+        user_buf = NULL;
+      }
+      if(!user_buf) user_buf = qmalloc(user_bfsz);
+      if(   lseek(fd_ssave, 0, SEEK_SET)
+         || read(fd_ssave, user_buf, user_bfsz) != user_bfsz) goto fatal;
+    }
+    if((work.doResize && apply_resize())) {
+      application->buffer = TScreen::screenBuffer;
+      application->changeBounds(TRect(0, 0, TScreen::screenWidth,
+                                      TScreen::screenHeight));
+//      application->setState(sfExposed, Boolean(False));
+//      application->setState(sfExposed, Boolean(True));
+      goto full_clear;
+    }
+    if(to_user) {
+full_clear:
+      p = reinit_screen(cursor_hide, p); //... and set cursor state
+    } else if(!cursor_hide && cur_invis) p = tistr_copy(p, cur_vis);
+    if((len = p - buff) != 0) term_out(buff, len);
+    set_mouse_attach('h');      // attach mouse
+    work.app_screen = 0;  // only here (LOG of GPM attach :)
+    application->redraw();
+done:
+    return(true);
+}
+
+// unix inherit ttyin chanel status :(
+void TProgram::at_child_exec(bool before)
+{
+  if(fcntl(0, F_SETFL, tty_mode | (before ? 0 : O_NONBLOCK)) == -1)
+    abort();
 }
 
 //---------------------------------------------------------------------------
@@ -1957,8 +2171,6 @@ static unsigned get_free_state(void)
 //---------------------------------------------------------------------------
 static const char *addkey(const char *seq, ushort code, uchar mods,
                           unsigned from)
-#define addesc(a,b,c)  addkey(a,b,c,1)
-
 {
     unsigned  idx, state = from;
     uchar     c = *seq++;
@@ -1990,6 +2202,7 @@ force_first:
     }
     return(NULL);
 }
+#define addesc(a,b,c)  addkey(a,b,c,1)
 
 //---------------------------------------------------------------------------
 static int findkey(const char *seq)
@@ -2092,10 +2305,9 @@ static const char *addctrl(const char *p, ushort code, uchar mods)
 //---------------------------------------------------------------------------
 static const char PUTTY_STRING[] = "PuTTY";
 static inline int isPuTTY(void)
-{
+{ // input alwais flushed before and after this call
     int   r;
 
-    while(qgetch() != EOF) /* EMPTY */;
     *(uchar *)&r = 5; // ENQ
     term_out((char *)&r, 1);
     sleep(1);
@@ -2103,16 +2315,15 @@ static inline int isPuTTY(void)
       if((r = qgetch()) == EOF) return(0);
       if((uchar)r != PUTTY_STRING[i]) break;
     }
-    while(qgetch() != EOF) /* EMPTY */;
     return(r == sizeof(PUTTY_STRING)-1);
 }
 
 //---------------------------------------------------------------------------
 static void termkbd_init(signed char std_term)
 { // 1 linux, 2 xterm, 3 scoansi, 4 xterm-sco...
-#define S kblShift
-#define C kblCtrl
-#define A kblAltL
+#define S kbShift
+#define C kbCtrlShift
+#define A kbLeftAlt
 
     struct tinfo {
       ushort  code;
@@ -2125,90 +2336,94 @@ static void termkbd_init(signed char std_term)
 
 #define _EMP_ ""
     static const tinfo key_defs[] = {
-      {  kbF1,     0, "k1", "OP",     "[[A",  "[M"  }, // kf1
-      {  kbF2,     0, "k2", "OQ",     "[[B",  "[N"  }, // kf2
-      {  kbF3,     0, "k3", "OR",     "[[C",  "[O"  }, // kf3
-      {  kbF4,     0, "k4", "OS",     "[[D",  "[P"  }, // kf4
-      {  kbF5,     0, "k5", "[15~",   "[[E",  "[Q"  }, // kf5
-      {  kbF6,     0, "k6", "[17~",   "[17~", "[R"  }, // kf6
-      {  kbF7,     0, "k7", "[18~",   "[18~", "[S"  }, // kf7
-      {  kbF8,     0, "k8", "[19~",   "[19~", "[T"  }, // kf8
-      {  kbF9,     0, "k9", "[20~",   "[20~", "[U"  }, // kf9
-      { kbF10,     0, "k;", "[21~",   "[21~", "[V"  }, // kf10
-      { kbF11,     0, "F1", "[23~",   "[23~", "[W"  }, // kf11
-      { kbF12,     0, "F2", "[24~",   "[24~", "[X"  }, // kf12
-      {  kbF1,   S,   "F3", "O2P",    "[25~", "[Y"  }, // kf13
-      {  kbF2,   S,   "F4", "O2Q",    "[26~", "[-"  }, // kf14
-      {  kbF3,   S,   "F5", "O2R",    "[28~", "[a"  }, // kf15
-      {  kbF4,   S,   "F6", "O2S",    "[29~", "[b"  }, // kf16
-      {  kbF5,   S,   "F7", "[15;2~", "[31~", "[c"  }, // kf17
-      {  kbF6,   S,   "F8", "[17;2~", "[32~", "[d"  }, // kf18
-      {  kbF7,   S,   "F9", "[18;2~", "[33~", "[e"  }, // kf19
-      {  kbF8,   S,   "FA", "[19;2~", "[34~", "[f"  }, // kf20
-      {  kbF9,   S,   "FB", "[20;2~", _EMP_,  "[g"  }, // kf21
-      { kbF10,   S,   "FC", "[21;2~", _EMP_,  "[h"  }, // kf22
-      { kbF11,   S,   "FD", "[23;2~", _EMP_,  "[i"  }, // kf23
-      { kbF12,   S,   "FE", "[24;2~", _EMP_,  "[j"  }, // kf24
-      {  kbF1,     C, "FF", "O5P",    _EMP_,  "[k"  }, // kf25
-      {  kbF2,     C, "FG", "O5Q",    _EMP_,  "[l"  }, // kf26
-      {  kbF3,     C, "FH", "O5R",    _EMP_,  "[m"  }, // kf27
-      {  kbF4,     C, "FI", "O5S",    _EMP_,  "[n"  }, // kf28
-      {  kbF5,     C, "FJ", "[15;5~", _EMP_,  "[o"  }, // kf29
-      {  kbF6,     C, "FK", "[17;5~", _EMP_,  "[p"  }, // kf30
-      {  kbF7,     C, "FL", "[18;5~", _EMP_,  "[q"  }, // kf31
-      {  kbF8,     C, "FM", "[19;5~", _EMP_,  "[r"  }, // kf32
-      {  kbF9,     C, "FN", "[20;5~", _EMP_,  "[s"  }, // kf33
-      { kbF10,     C, "FO", "[21;5~", _EMP_,  "[t"  }, // kf34
-      { kbF11,     C, "FP", "[23;5~", _EMP_,  "[u"  }, // kf35
-      { kbF12,     C, "FQ", "[24;5~", _EMP_,  "[v"  }, // kf36
-      {  kbF1,   S+C, "FR", "O6P",    _EMP_,  "[w"  }, // kf37
-      {  kbF2,   S+C, "FS", "O6Q",    _EMP_,  "[x"  }, // kf38
-      {  kbF3,   S+C, "FT", "O6R",    _EMP_,  "[y"  }, // kf39
-      {  kbF4,   S+C, "FU", "O6S",    _EMP_,  "[z"  }, // kf40
-      {  kbF5,   S+C, "FV", "[15;6~", _EMP_,  "[@"  }, // kf41
-      {  kbF6,   S+C, "FW", "[17;6~", _EMP_,  "[["  }, // kf42
-      {  kbF7,   S+C, "FX", "[18;6~", _EMP_,  "[\\" }, // kf43
-      {  kbF8,   S+C, "FY", "[19;6~", _EMP_,  "[]"  }, // kf44
-      {  kbF9,   S+C, "FZ", "[20;6~", _EMP_,  "[^"  }, // kf45
-      { kbF10,   S+C, "Fa", "[21;6~", _EMP_,  "[_"  }, // kf46
-      { kbF11,   S+C, "Fb", "[23;6~", _EMP_,  "[`"  }, // kf47
-      { kbF12,   S+C, "Fc", "[24;6~", _EMP_,  "[{"  }, // kf48
+      {  kbF1,       0, "k1", "OP",     "[[A",  "[M"  }, // kf1
+      {  kbF2,       0, "k2", "OQ",     "[[B",  "[N"  }, // kf2
+      {  kbF3,       0, "k3", "OR",     "[[C",  "[O"  }, // kf3
+      {  kbF4,       0, "k4", "OS",     "[[D",  "[P"  }, // kf4
+      {  kbF5,       0, "k5", "[15~",   "[[E",  "[Q"  }, // kf5
+      {  kbF6,       0, "k6", "[17~",   "[17~", "[R"  }, // kf6
+      {  kbF7,       0, "k7", "[18~",   "[18~", "[S"  }, // kf7
+      {  kbF8,       0, "k8", "[19~",   "[19~", "[T"  }, // kf8
+      {  kbF9,       0, "k9", "[20~",   "[20~", "[U"  }, // kf9
+      { kbF10,       0, "k;", "[21~",   "[21~", "[V"  }, // kf10
+      { kbF11,       0, "F1", "[23~",   "[23~", "[W"  }, // kf11
+      { kbF12,       0, "F2", "[24~",   "[24~", "[X"  }, // kf12
+      {  kbShiftF1,  S,   "F3", "O2P",    "[25~", "[Y"  }, // kf13
+      {  kbShiftF2,  S,   "F4", "O2Q",    "[26~", "[-"  }, // kf14
+      {  kbShiftF3,  S,   "F5", "O2R",    "[28~", "[a"  }, // kf15
+      {  kbShiftF4,  S,   "F6", "O2S",    "[29~", "[b"  }, // kf16
+      {  kbShiftF5,  S,   "F7", "[15;2~", "[31~", "[c"  }, // kf17
+      {  kbShiftF6,  S,   "F8", "[17;2~", "[32~", "[d"  }, // kf18
+      {  kbShiftF7,  S,   "F9", "[18;2~", "[33~", "[e"  }, // kf19
+      {  kbShiftF8,  S,   "FA", "[19;2~", "[34~", "[f"  }, // kf20
+      {  kbShiftF9,  S,   "FB", "[20;2~", _EMP_,  "[g"  }, // kf21
+      { kbShiftF10,  S,   "FC", "[21;2~", _EMP_,  "[h"  }, // kf22
+      { kbShiftF11,  S,   "FD", "[23;2~", _EMP_,  "[i"  }, // kf23
+      { kbShiftF12,  S,   "FE", "[24;2~", _EMP_,  "[j"  }, // kf24
+      {  kbCtrlF1,   C, "FF", "O5P",    _EMP_,  "[k"  }, // kf25
+      {  kbCtrlF2,   C, "FG", "O5Q",    _EMP_,  "[l"  }, // kf26
+      {  kbCtrlF3,   C, "FH", "O5R",    _EMP_,  "[m"  }, // kf27
+      {  kbCtrlF4,   C, "FI", "O5S",    _EMP_,  "[n"  }, // kf28
+      {  kbCtrlF5,   C, "FJ", "[15;5~", _EMP_,  "[o"  }, // kf29
+      {  kbCtrlF6,   C, "FK", "[17;5~", _EMP_,  "[p"  }, // kf30
+      {  kbCtrlF7,   C, "FL", "[18;5~", _EMP_,  "[q"  }, // kf31
+      {  kbCtrlF8,   C, "FM", "[19;5~", _EMP_,  "[r"  }, // kf32
+      {  kbCtrlF9,   C, "FN", "[20;5~", _EMP_,  "[s"  }, // kf33
+      { kbCtrlF10,   C, "FO", "[21;5~", _EMP_,  "[t"  }, // kf34
+      { kbCtrlF11,   C, "FP", "[23;5~", _EMP_,  "[u"  }, // kf35
+      { kbCtrlF12,   C, "FQ", "[24;5~", _EMP_,  "[v"  }, // kf36
+      {  kbCtrlF1, S+C, "FR", "O6P",    _EMP_,  "[w"  }, // kf37
+      {  kbCtrlF2, S+C, "FS", "O6Q",    _EMP_,  "[x"  }, // kf38
+      {  kbCtrlF3, S+C, "FT", "O6R",    _EMP_,  "[y"  }, // kf39
+      {  kbCtrlF4, S+C, "FU", "O6S",    _EMP_,  "[z"  }, // kf40
+      {  kbCtrlF5, S+C, "FV", "[15;6~", _EMP_,  "[@"  }, // kf41
+      {  kbCtrlF6, S+C, "FW", "[17;6~", _EMP_,  "[["  }, // kf42
+      {  kbCtrlF7, S+C, "FX", "[18;6~", _EMP_,  "[\\" }, // kf43
+      {  kbCtrlF8, S+C, "FY", "[19;6~", _EMP_,  "[]"  }, // kf44
+      {  kbCtrlF9, S+C, "FZ", "[20;6~", _EMP_,  "[^"  }, // kf45
+      { kbCtrlF10, S+C, "Fa", "[21;6~", _EMP_,  "[_"  }, // kf46
+      { kbCtrlF11, S+C, "Fb", "[23;6~", _EMP_,  "[`"  }, // kf47
+      { kbCtrlF12, S+C, "Fc", "[24;6~", _EMP_,  "[{"  }, // kf48
     // maximum possible kf63 (alplabetize)
-      { kbHome,    0, "kh", "OH",     "[1~",  "[H"  }, // khome/
-      { kbHome,  S  , "#2", "[1;2H",  _EMP_,  _EMP_ }, // kHOM
-      { kbIns,     0, "kI", "[2~",    "[2~",  "[L"  }, // kich1
-      { kbIns,   S  , "#3", "[2;2~",  _EMP_,  "[("  }, // kIC (last - scokeys)
-      { kbDel,     0, "kD", "[3~",    "[3~",  _EMP_ }, // kdch1 (sco-177 :)
-      { kbDel,   S  , "*4", "[3;2~",  _EMP_,  "[)"  }, // kDC (last - scokeys)
-      { kbEnd,     0, "@7", "OF",     "[4~",  "[F"  }, // kend
-      { kbEnd,   S  , "*7", "[1;2F",  _EMP_,  _EMP_ }, // kEND
-      { kbPgUp,    0, "kP", "[5~",    "[5~",  "[I"  }, // kpp
-      { kbPgUp,    0, "%8", _EMP_,    _EMP_,  _EMP_ }, // kprv
-      { kbPgUp,  S  , "%e", "[5;2~",  _EMP_,  _EMP_ }, // kPRV
-      { kbPgDn,    0, "kN", "[6~",    "[6~",  "[G"  }, // knp
-      { kbPgDn,    0, "%5", _EMP_,    _EMP_,  _EMP_ }, // knxt
-      { kbPgDn,  S  , "%c", "[6;2~",  _EMP_,  _EMP_ }, // kNXT
+      { kbHome,      0, "kh", "OH",     "[1~",  "[H"  }, // khome/
+      { kbHome,      S, "#2", "[1;2H",  _EMP_,  _EMP_ }, // kHOM
+      { kbIns,       0, "kI", "[2~",    "[2~",  "[L"  }, // kich1
+      { kbShiftIns,  S, "#3", "[2;2~",  _EMP_,  "[("  }, // kIC (last - scokeys)
+      { kbDel,       0, "kD", "[3~",    "[3~",  "[."  }, // kdch1 (last-scokey, sco-177 :)
+      { kbDel,       S, "*4", "[3;2~",  _EMP_,  "[)"  }, // kDC (last - scokeys)
+      { kbEnd,       0, "@7", "OF",     "[4~",  "[F"  }, // kend
+      { kbEnd,       S, "*7", "[1;2F",  _EMP_,  _EMP_ }, // kEND
+      { kbPgUp,      0, "kP", "[5~",    "[5~",  "[I"  }, // kpp
+      { kbPgUp,      0, "%8", _EMP_,    _EMP_,  _EMP_ }, // kprv
+      { kbPgUp,      S, "%e", "[5;2~",  _EMP_,  "[<"  }, // kPRV
+      { kbPgDn,      0, "kN", "[6~",    "[6~",  "[G"  }, // knp
+      { kbPgDn,      0, "%5", _EMP_,    _EMP_,  _EMP_ }, // knxt
+      { kbPgDn,      S, "%c", "[6;2~",  _EMP_,  "[}"  }, // kNXT
     //
-      { kbUp,      0, "ku", "OA",     "[A",   "[A"  }, // kcuu1
-      { kbDown,    0, "kd", "OB",     "[B",   "[B"  }, // kcud1
-      { kbRight,   0, "kr", "OC",     "[C",   "[C"  }, // kcuf1
-      { kbRight,   S, "%i", "[1;2C",  _EMP_,  _EMP_ }, // kRIT
-      { kbLeft,    0, "kl", "OD",     "[D",   "[D"  }, // kcub1
-      { kbLeft,    S, "#4", "[1;2D",  _EMP_,  _EMP_ }, // kLFT
+      { kbUp,        0, "ku", "OA",     "[A",   "[A"  }, // kcuu1
+      { kbDown,      0, "kd", "OB",     "[B",   "[B"  }, // kcud1
+      { kbRight,     0, "kr", "OC",     "[C",   "[C"  }, // kcuf1
+      { kbRight,     S, "%i", "[1;2C",  _EMP_,  _EMP_ }, // kRIT
+      { kbLeft,      0, "kl", "OD",     "[D",   "[D"  }, // kcub1
+      { kbLeft,      S, "#4", "[1;2D",  _EMP_,  _EMP_ }, // kLFT
     //
-//      { kbBack,    0,  }, // kbs // always ^H or 127 :)
-      { kbTab,     S, "kB", "[Z",     _EMP_,  "[Z"  }, // kcbt
-      { kbEnter,   0, "@8", "EOM",    _EMP_,  _EMP_ }, // kent (enter/send)
+//      { kbBack,       0,  }, // kbs // always ^H or 127 :)
+      { kbShiftTab,  S, "kB", "[Z",     _EMP_,  "[Z"  }, // kcbt
+      { kbEnter,     0, "@8", "EOM",    _EMP_,  _EMP_ }, // kent (enter/send)
     // keypad
-      { '5',       0, "K2", "EOE",    "[G",   _EMP_ }, // kb2 (center of keypad)
+      { kbK5,        0, "K2", "EOE",    "[G",   _EMP_ }, // kb2 (center of keypad)
+    // non-standart addonce
+      { kbCtrlIns,   C, "&6", _EMP_,    _EMP_,  "[<"  }, // ksav (last scokey)
     // MUST be last!
-      { kbMouse,   0, "Km", "[M",     "[M",   _EMP_ }  // kmous (sco - alias)
+      { kbMouse,     0, "Km", "[M",     "[M",   _EMP_ }  // kmous (sco - alias)
     };
 #undef _EMP_
 
 
     size_t      i, off;
     const char  *p;
+
+    remap_del_idx = REMAP_DEL2DEL;  // default
 
     off = 0;
     if(std_term < 0) {
@@ -2218,6 +2433,15 @@ static void termkbd_init(signed char std_term)
         off += (offsetof(tinfo, _xterm) - offsetof(tinfo, _linux));
         if(std_term != 2)  // sconasi OR xterm-sco
           off += (offsetof(tinfo, _sco) - offsetof(tinfo, _xterm));
+      }
+      if(std_term != 3) goto remap_del2bs; // xterm for PuTTy only)
+    } else {
+      if((p = Pgetstr("kb", NULL)) != NULL) { // kbs
+        if(*(ushort *)p == 127) goto remap_del2bs;
+      } // not 'else' => force delete as backspace always when possible
+      if((p = Pgetstr("kD", NULL)) == NULL || *(ushort *)p != 127) { // kdch1
+remap_del2bs:
+        remap_del_idx = REMAP_DEL2BS;
       }
     }
 
@@ -2249,16 +2473,16 @@ print_err_code:
 /* standart definitions (overlap bad clients/records) */
     if((i = findkey("[M")) == 0) { // can add
       if(work.have_xmice) goto set_mice_key;
-      set_tty_mode(&my_tios, tty_mode | O_NONBLOCK);
+      set_tty_mode(&my_tios, tty_mode | O_NONBLOCK);  // and flush input
       i = isPuTTY();  // putty always send reports :(
-      set_tty_mode(&old_tios, tty_mode);
+      set_tty_mode(&old_tios, tty_mode);  // and flush input
       if(i) {
         work.have_xmice = 1;
 set_mice_key:
         addesc("[M", kbMouse, 0);
       }
     } else if((int)i > 0 && std_term) {
-      overlapXmice_mods = state2tvstate(keymap[i].mods);
+      overlapXmice_mods = keymap[i].mods;
       keymap[i].mods    = 0;
       overlapXmice_code = keymap[i].tvcode;
       keymap[i].tvcode  = kbMouse;
@@ -2310,7 +2534,7 @@ no_append_xt2:
       for(i = 0; i < qnumber(xterm_alias); i++)
         if(findkey(xterm_alias[i].str)) goto no_append_xt3;
       for(i = 0; i < qnumber(xterm_alias); i++)
-        addesc(xterm_alias[i].str, xterm_alias[i].id, kblShift);
+        addesc(xterm_alias[i].str, xterm_alias[i].id, kbShift);
 no_append_xt3:
 
       static const struct { // xterm-old (putty)
@@ -2348,7 +2572,7 @@ no_append_xt:
       for(i = 0; i < qnumber(xtc_keys); i++)
         if(findkey(xtc_keys[i].str)) goto no_append_xtc;
       for(i = 0; i < qnumber(xtc_keys); i++)
-        addesc(xtc_keys[i].str, xtc_keys[i].id, kblShift);
+        addesc(xtc_keys[i].str, xtc_keys[i].id, kbShift);
     }
 
 no_append_xtc:
@@ -2431,6 +2655,7 @@ TScreen::TScreen(void)
     my_tios.c_iflag &= ~(IXOFF | IXON);   // Disable Xon/off
     my_tios.c_lflag &= ~(ICANON | ECHO | ISIG); // Character oriented, no echo, no signals
     my_tios.c_oflag |= OPOST;  // apply special output sequence
+    my_tios.c_cc[VMIN] = 1;
 
     if((p = getenv("TVLOG")) != NULL && *p) {
       FILE *f;
@@ -2446,7 +2671,7 @@ TScreen::TScreen(void)
     no_x11 = noansi = no_gpm = ign_meta8 = 0;
     SM_DOSCYR_DEFAULT;  // mode.(doscyr_ninp=doscyr_nout=1)
     if((ps = getenv("TVOPT")) != NULL) {
-      ps = qstrdup(ps);
+      ps = qqstrdup(ps);
       for(p = strtok(ps, ","); p; p = strtok(NULL, ","))
         if(!strcasecmp(p, "noX11")) ++no_x11;
         else if(!strcasecmp(p, "noGPM")) ++no_gpm;
@@ -2454,12 +2679,12 @@ TScreen::TScreen(void)
         else if(!strcasecmp(p, "alt866")) mode.alt866_font = 1;
         else if(!strcasecmp(p, "xtrack")) XMOU_SET_TRACK;
         else if(!strcasecmp(p, "mono")) {
-          if(noansi > 0) goto ansi_uncompat;
+          if(noansi > 0) goto ansi_incompat;
           noansi = -1;
         } else if(!strcasecmp(p, "ansi")) {
           if(noansi < 0) {
-ansi_uncompat:
-            error("TVOPT: 'ansi' and 'mono' are uncompatible");
+ansi_incompat:
+            error("TVOPT: 'ansi' and 'mono' are incompatible");
           }
           noansi = 1;
         } else if(!strncasecmp(p, "cyrcvt=", sizeof("cyrcvt=")-1)) {
@@ -2503,10 +2728,10 @@ drop_gpm:
         if(!no_gpm)
           error("Invalid libgpm.so\n"
                 "\tTemporary you may want to append 'noGPM' to TVOPT");
-
+free_gpm:
         dlclose(hGPM);
         hGPM = NULL;
-      }
+      } else if(no_gpm && !restart_gpm(-1, 0)) goto free_gpm;
     }
 
 //---
@@ -2557,6 +2782,30 @@ set_term_linux:
       ++no_gpm; // std_term_type = linux(1)
     } else if(!strncmp(p, "scoansi", sizeof("scoansi")-1)) goto set_term_sco;
 
+    /* prepare screen switching for debugger */
+    if(work.pc_console) {
+      struct stat st;
+      int         minor;
+      if(   !fstat(0, &st)
+         && S_ISCHR(st.st_mode)
+         && (st.st_rdev & 0xFF00) == 0x400  // tty
+         && (minor = st.st_rdev & 0xFF) != 0 && minor <= 31
+         && st.st_uid == getuid()) {
+
+          char s[64];
+          sprintf(s, "/dev/vcsa%d", minor);
+          if((fd_ssave = open(s, O_RDWR)) == -1) {
+            sprintf(s, "/dev/vcc/a%d", minor);
+            if((fd_ssave = open(s, O_RDWR)) == -1) ++fd_ssave; // 0
+          }
+      }
+      if(fd_ssave && fcntl(fd_ssave, F_SETFD, FD_CLOEXEC)) {
+        close(fd_ssave);
+        fd_ssave = 0;  // PARANOYA
+      }
+      if(!fd_ssave) LOG("Can't get console saver!");
+    } else if(p && !memcmp(p, "xterm", sizeof("xterm")-1)) --fd_ssave; // -1
+
 //    if(no_gpm) goto without_libcurses;
     if((hCurses = dlopen("libcurses.so", RTLD_NOW)) != NULL) {
       typedef int (*Tgetent)(char *, const char *);
@@ -2576,7 +2825,8 @@ set_term_linux:
 drop_curses:
         if(!no_gpm)
           error("Invalid libcurses.so\n"
-                "\tTemporary you can work without it but only if the terminal is:\n"
+                "\tAs a temporary workaround you could\n"
+                "\tset the TERM environment variable to:\n"
                 "\txterm, linux or scoansi.");
         dlclose(hCurses);
         hCurses = NULL;
@@ -2624,6 +2874,9 @@ without_ncurses:
 
     /* catch useful signals */
     set_all_signals(sigHandler);
+    // for switch_screen ONLY
+    signal(SIGINT, SIG_IGN);
+    signal(SIGTSTP, SIG_IGN);
 
     /* internal stuff */
     evIn = evOut = evQueue;

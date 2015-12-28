@@ -10,39 +10,12 @@
 /*                                                                         */
 /* ------------------------------------------------------------------------*/
 
+#include <cm_codes.h>
+
 #if !defined( __COMMAND_CODES )
 #define __COMMAND_CODES
 
 const ushort
-
-//  Standard command codes
-
-    cmValid         = 0,
-    cmQuit          = 1,
-    cmError         = 2,
-    cmMenu          = 3,
-    cmClose         = 4,
-    cmZoom          = 5,
-    cmResize        = 6,
-    cmNext          = 7,
-    cmPrev          = 8,
-    cmHelp          = 9,
-
-//  TDialog standard commands
-
-    cmOK            = 10,
-    cmCancel        = 11,
-    cmYes           = 12,
-    cmNo            = 13,
-    cmDefault       = 14,
-
-
-    // SS: some new internal commands.
-
-    cmSysRepaint    = 38,
-    cmSysResize     = 39,
-    cmSysWakeup     = 40,
-
 //  TView State masks
 
     sfVisible       = 0x001,
@@ -140,38 +113,6 @@ const ushort
     wpBlueWindow    = 0,
     wpCyanWindow    = 1,
     wpGrayWindow    = 2,
-
-//  Application command codes
-
-    cmCut           = 20,
-    cmCopy          = 21,
-    cmPaste         = 22,
-    cmUndo          = 23,
-    cmClear         = 24,
-    cmTile          = 25,
-    cmCascade       = 26,
-
-// Standard messages
-
-    cmReceivedFocus     = 50,
-    cmReleasedFocus     = 51,
-    cmCommandSetChanged = 52,
-
-// TScrollBar messages
-
-    cmScrollBarChanged  = 53,
-    cmScrollBarClicked  = 54,
-
-// TWindow select messages
-
-    cmSelectWindowNum   = 55,
-
-//  TListViewer messages
-
-    cmListItemSelected  = 56,
-
-    cmGrabDefault       = 62,
-    cmReleaseDefault    = 63,
 
 //  Event masks
 
@@ -347,7 +288,7 @@ public:
     void drawUnderView( Boolean doShadow, TView *lastView );
 
     virtual size_t dataSize();
-    virtual void getData( void *rec );
+    virtual void getData( void *rec, size_t recsize );
     virtual void setData( void *rec );
 
     void blockCursor();
@@ -1204,12 +1145,11 @@ public:
     virtual TPalette& getPalette() const;
     /**
      * Derived classes must override it with a function that writes a string
-     * not exceeding `maxLen' at address `dest', given an item index
-     * referenced by `item'.
+     * at address `dest', given an item index referenced by `item'.
      *
      * Note that @ref draw() needs to call getText().
      */
-    virtual void getText( char *dest, int item, int maxLen );
+    virtual void getText( char *dest, int item, size_t destsize );
     /**
      * Returns True if the given item is selected (focused), that is, if
      * `item' == @ref focused.
@@ -1317,6 +1257,22 @@ public:
     static TStreamable *build();
 #endif  // ifndef NO_TV_STREAMS
 
+protected:
+    // next two variables are initialized in the constructor as -1
+    int first_selected; // if < 0 - no selected item(s)
+    int last_selected;  // if < 0 - multiselection disabled
+    // return if the item has been selected
+    virtual bool isItemSelected( int item );
+private:
+    inline void remove_selection(void)
+    {
+        if ( first_selected >= 0 )
+            {
+            first_selected = -1;
+            drawView();
+            }
+    }
+
 };
 
 #ifndef NO_TV_STREAMS
@@ -1379,7 +1335,7 @@ public:
     virtual void changeBounds( const TRect& bounds );
 
     virtual size_t dataSize();
-    virtual void getData( void *rec );
+    virtual void getData( void *rec, size_t recsize );
     virtual void setData( void *rec );
 
     virtual void draw();

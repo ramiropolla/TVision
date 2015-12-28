@@ -159,19 +159,19 @@ void TView::moveGrow( TPoint p,
                     )
 {
     TRect   r;
-    s.x = min(max(s.x, minSize.x), maxSize.x);
-    s.y = min(max(s.y, minSize.y), maxSize.y);
-    p.x = min(max(p.x, limits.a.x - s.x+1), limits.b.x-1);
-    p.y = min(max(p.y, limits.a.y - s.y+1), limits.b.y-1);
+    s.x = qmin(qmax(s.x, minSize.x), maxSize.x);
+    s.y = qmin(qmax(s.y, minSize.y), maxSize.y);
+    p.x = qmin(qmax(p.x, limits.a.x - s.x+1), limits.b.x-1);
+    p.y = qmin(qmax(p.y, limits.a.y - s.y+1), limits.b.y-1);
 
     if( (mode & dmLimitLoX) != 0 )
-        p.x = max(p.x, limits.a.x);
+        p.x = qmax(p.x, limits.a.x);
     if( (mode & dmLimitLoY) != 0 )
-        p.y = max(p.y, limits.a.y);
+        p.y = qmax(p.y, limits.a.y);
     if( (mode & dmLimitHiX) != 0 )
-        p.x = min(p.x, limits.b.x-s.x);
+        p.x = qmin(p.x, limits.b.x-s.x);
     if( (mode & dmLimitHiY) != 0 )
-        p.y = min(p.y, limits.b.y-s.y);
+        p.y = qmin(p.y, limits.b.y-s.y);
     r = TRect(p.x, p.y, p.x +  s.x, p.y +  s.y);
     locate(r);
 }
@@ -401,7 +401,7 @@ void TView::getCommands( TCommandSet& commands )
     commands = curCommandSet;
 }
 
-void TView::getData( void * )
+void TView::getData( void *, size_t )
 {
 }
 

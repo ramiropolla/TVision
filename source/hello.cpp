@@ -93,7 +93,7 @@ void THelloApp::fileBox() {
                                 5);
   ushort c = TProgram::deskTop->execView(dialog);
   char buf[MAXPATH];
-  dialog->getFileName(buf);
+  dialog->getFileName(buf, sizeof(buf));
   if ( c != cmCancel ) printf("File: '%s'\n",buf);
   TObject::destroy( dialog );
 }
@@ -195,3 +195,6 @@ int main(int argc,char *argv[])
 //  doom("return 0\n");
   return 0;
 }
+
+char *ActionKey(const char *) { return ""; }
+idaman char *ida_export ivalue1(int) { return ""; }

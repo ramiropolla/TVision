@@ -39,14 +39,16 @@ size_t TMemo::dataSize()
     return bufSize + sizeof( size_t );
 }
 
-void TMemo::getData( void *rec )
+void TMemo::getData( void *rec, size_t recsize )
 {
-    TMemoData *data = (TMemoData *)rec;
-
+  TMemoData *data = (TMemoData *)rec;
+  if ( ssize_t(recsize) >= sizeof(data->length)+bufSize )
+  {
     data->length = bufLen;
     memcpy(data->buffer, buffer, curPtr);
     memcpy(&data->buffer[curPtr], buffer+(curPtr + gapLen), bufLen - curPtr);
     memset(&data->buffer[bufLen], 0, bufSize - bufLen);
+  }
 }
 
 void TMemo::setData( void *rec )
@@ -56,7 +58,7 @@ void TMemo::setData( void *rec )
     memcpy(&buffer[bufSize - data->length], data->buffer, data->length);
     setBufLen(data->length);
 }
- 
+
 TPalette& TMemo::getPalette() const
 {
     static TPalette palette( cpMemo, sizeof( cpMemo )-1 );

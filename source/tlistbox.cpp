@@ -46,22 +46,25 @@ size_t TListBox::dataSize()
     return sizeof(TListBoxRec);
 }
 
-void TListBox::getData( void * rec )
+void TListBox::getData( void * rec, size_t recsize )
 {
+  if ( ssize_t(recsize) >= sizeof(TListBoxRec) )
+  {
     TListBoxRec *p = (TListBoxRec *)rec;
     p->items = items;
     p->selection = focused;
+  }
 }
 
-void TListBox::getText( char *dest, int item, int maxChars )
+void TListBox::getText( char *dest, int item, size_t destsize )
 {
-        if (items != 0 )
-                {
-                strncpy( dest, (const char *)(items->at(item)), maxChars );
-                dest[maxChars] = '\0';
-                }
+  if ( ssize_t(destsize) > 0 )
+  {
+    if (items != 0 )
+      qstrncpy( dest, (const char *)(items->at(item)), destsize );
     else
-        *dest = EOS;
+      *dest = EOS;
+  }
 }
 
 void TListBox::newList( TCollection *aList )

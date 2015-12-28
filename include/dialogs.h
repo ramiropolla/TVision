@@ -11,6 +11,8 @@
 /*                                                                         */
 /* ------------------------------------------------------------------------*/
 
+#include <cm_codes.h>
+
 #if !defined( __BUTTON_TYPE )
 #define __BUTTON_TYPE
 
@@ -18,9 +20,7 @@ const int
     bfNormal    = 0x00,
     bfDefault   = 0x01,
     bfLeftJust  = 0x02,
-    bfBroadcast = 0x04,
-
-    cmRecordHistory = 60;
+    bfBroadcast = 0x04;
 
 #endif  // __BUTTON_TYPE
 
@@ -136,6 +136,7 @@ class TEvent;
 class TInputLine : public TView
 {
 public:
+    static bool disableReselect; // for 'ovelapped' wait_boxes
     /**
      * Creates an input box control with the given values by calling
      * TView::TView(bounds).
@@ -193,7 +194,7 @@ public:
      * handle non-string data types. You can also use getData() to
      * convert from a string to other data types after editing by TInputLine.
      */
-    virtual void getData( void *rec );
+    virtual void getData( void *rec, size_t recsize );
     /**
      * Returns the default palette string.
      */
@@ -286,12 +287,13 @@ public:
     int selEnd;
 
 private:
-
     Boolean canScroll( int delta );
     int mouseDelta( TEvent& event );
     int mousePos( TEvent& event );
     void deleteSelect();
     void adjustSelectBlock();
+    char *clip_get(size_t &clipsz);
+    bool clip_put(void);
 
     static const char rightArrow;
     static const char leftArrow;
@@ -667,7 +669,7 @@ public:
     /**
      * Destroys the TSItem object by calling delete value.
      */
-    ~TSItem() { delete[] value; }
+    ~TSItem() { delete[] (char *)value; }
     /**
      * The string for this TSItem object.
      */
@@ -771,7 +773,7 @@ public:
      * @see TCluster::drawMultiBox
      */
     void drawBox( const char *icon, char marker );
-    virtual void getData( void *rec );
+    virtual void getData( void *rec, size_t recsize );
     /**
      * Returns the help context of the selected item.
      *
@@ -1015,8 +1017,8 @@ public:
     ~TListBox();
 
     virtual size_t dataSize();
-    virtual void getData( void *rec );
-    virtual void getText( char *dest, int item, int maxLen );
+    virtual void getData( void *rec, size_t recsize );
+    virtual void getText( char *dest, int item, size_t destsize );
     virtual void newList( TCollection *aList );
     virtual void setData( void *rec );
 
@@ -1086,7 +1088,7 @@ public:
 
     virtual void draw();
     virtual TPalette& getPalette() const;
-    virtual void getText( char * );
+    virtual void getText( char *buf, size_t bufsize );
 
 protected:
 
@@ -1146,7 +1148,7 @@ public:
     TParamText( const TRect& bounds, const char *aText, int aParamCount );
 
     virtual size_t dataSize();
-    virtual void getText( char * );
+    virtual void getText( char *buf, size_t bufsize );
     virtual void setData( void *rec );
 
 protected:
@@ -1438,7 +1440,7 @@ public:
      * getText() is called by the @ref TListViewer::draw() member function for
      * each visible item in the list.
      */
-    virtual void getText( char *dest, int item, int maxLen );
+    virtual void getText( char *dest, int item, size_t destsize );
     /**
      * The history viewer handles two kinds of events itself; all others are
      * passed to @ref TListViewer::handleEvent().
@@ -1561,7 +1563,7 @@ public:
      * Returns in `dest' the string value of the @ref THistoryViewer::focused
      * item in the associated history viewer.
      */
-    virtual void getSelection( char *dest );
+    virtual void getSelection( char *dest, size_t destsize );
     /**
      * Instantiates and inserts a @ref THistoryViewer object inside the
      * boundaries of the history window for the list associated with the

@@ -21,6 +21,11 @@
 #define Uses_TEvent
 #define Uses_opstream
 #define Uses_ipstream
+#ifdef __NT__
+#define Uses_TThreaded
+#else
+#define Uses_TEditor
+#endif
 #include <tv.h>
 
 const int CONTROL_Y = 25;
@@ -82,8 +87,7 @@ void TInputLine::draw()
 
     b.moveChar( 0, ' ', color, size.x );
     char buf[MAXSTR];
-    strncpy( buf, data+firstPos, size.x - 2 );
-    buf[size.x - 2 ] = EOS;
+    qstrncpy( buf, data+firstPos, size.x - 1 );
     b.moveStr( 1, buf, color );
 
     if( canScroll(1) )
@@ -94,8 +98,8 @@ void TInputLine::draw()
             b.moveChar( 0, leftArrow, getColor(4), 1 );
         l = selStart - firstPos;
         r = selEnd - firstPos;
-        l = max( 0, l );
-        r = min( size.x - 2, r );
+        l = qmax( 0, l );
+        r = qmin( size.x - 2, r );
         if (l <  r)
             b.moveChar( l+1, 0, getColor(3), r - l );
         }
@@ -103,9 +107,9 @@ void TInputLine::draw()
     setCursor( curPos-firstPos+1, 0);
 }
 
-void TInputLine::getData( void *rec )
+void TInputLine::getData( void *rec, size_t recsize )
 {
-    memcpy( rec, data, dataSize() );
+    memcpy( rec, data, qmin(recsize, dataSize()) );
 }
 
 TPalette& TInputLine::getPalette() const
@@ -130,10 +134,10 @@ int TInputLine::mouseDelta( TEvent& event )
 int TInputLine::mousePos( TEvent& event )
 {
     TPoint mouse = makeLocal( event.mouse.where );
-    mouse.x = max( mouse.x, 1 );
-    int pos = mouse.x + firstPos - 1;
-    pos = max( pos, 0 );
-    pos = min( pos, strlen(data) );
+    mouse.x = qmax( mouse.x, 1 );
+    size_t pos = mouse.x + firstPos - 1;
+    pos = qmax( pos, 0 );
+    pos = qmin( pos, strlen(data) );
     return pos;
 }
 
@@ -141,7 +145,7 @@ void  TInputLine::deleteSelect()
 {
     if( selStart < selEnd )
         {
-        strcpy( data+selStart, data+selEnd );
+        qstrncpy( data+selStart, data+selEnd, maxLen+1-selStart );
         curPos = selStart;
         }
 }
@@ -163,6 +167,67 @@ void TInputLine::adjustSelectBlock()
         selStart = anchor;
         selEnd = curPos;
         }
+}
+
+bool TInputLine::clip_put(void)
+{
+#ifdef __NT__
+    return TThreads::clipboard_put(data, selStart, selEnd);
+#else
+    if ( TEditor::clipboard == NULL )
+        return false;
+    return TEditor::clipboard->insertBuffer(data, selStart, selEnd,
+                                            False, True) == True;
+#endif
+}
+
+char *TInputLine::clip_get(size_t &clipsz)
+{
+#ifdef __NT__
+    return TThreads::clipboard_get(clipsz, true);
+#else
+    char *answer = NULL;
+    if ( TEditor::clipboard != NULL )
+        {
+        char *ptr = TEditor::clipboard->buffer;
+        char *end = ptr + TEditor::clipboard->selEnd;
+        ptr += TEditor::clipboard->selStart;
+        if ( end > ptr )
+            {
+            size_t  tot = end - ptr;
+            if ( tot > clipsz )
+                tot = clipsz;
+            answer = (char *)malloc(tot + 1);
+            if ( answer != NULL )
+                {
+                char *p = answer;
+                while ( ptr < end && *ptr != 0 )  // second - paranoya
+                    {
+                    *p = *ptr++;
+                    if ( *p < ' ' || *p == 127 )
+                        {
+                        if ( p == answer ) continue;
+                        *p = ' ';
+                        }
+                        ++p;
+                    }
+                for ( ; p > answer; --p )
+                   if ( p[-1] > ' ' ) break;
+                if ( p == answer )
+                    {
+                        free ( answer);
+                        answer = NULL;
+                    }
+                    else
+                    {
+                        *p = '\0';
+                        clipsz = p - answer;
+                    }
+                }
+            }
+        }
+    return answer;
+#endif
 }
 
 void  TInputLine::handleEvent( TEvent& event )
@@ -270,6 +335,37 @@ void  TInputLine::handleEvent( TEvent& event )
                     case kbIns:
                         setState(sfCursorIns, Boolean(!(state & sfCursorIns)));
                         break;
+                    case kbShiftIns:
+                        {
+                        size_t len = strlen(data);
+                        if ( selEnd > selStart )
+                              len -= (selEnd - selStart);
+                        //              signed comparision (see above)
+                        if ( (int)len < 0 || (int)len >= maxLen )
+                            break;
+                        size_t clipsz = maxLen - len;
+                        char *pcl = clip_get(clipsz);
+                        if ( pcl == NULL )
+                            break;
+                        deleteSelect();
+                        if( firstPos > curPos )
+                            firstPos = curPos;
+                        memmove(data+curPos+clipsz, data+curPos,
+                                strlen(data+curPos) + 1);
+                        memcpy(data+curPos, pcl, clipsz);
+                        free(pcl);
+                        }
+                        break;
+                    case kbCtrlIns:
+                    case kbShiftDel:
+                        if (   !clip_put()
+                            || event.keyDown.keyCode == kbCtrlIns )
+                            {
+                              clearEvent ( event );
+                              return; // do not remove selection
+                            }
+                        deleteSelect();
+                        break;
                     default:
                         if( event.keyDown.charScan.charCode >= ' ' )
                             {
@@ -277,9 +373,9 @@ void  TInputLine::handleEvent( TEvent& event )
                             if( (state & sfCursorIns) != 0 )
                                 /* The following must be a signed comparison! */
                                 if( curPos < (int) strlen(data) )
-                                    strcpy( data + curPos, data + curPos + 1 );
+                                    qstrncpy( data + curPos, data + curPos + 1, maxLen+1-curPos );
 
-                                if( (int)strlen(data) < maxLen )
+                                if( strlen(data) < maxLen )
                                     {
                                     if( firstPos > curPos )
                                         firstPos = curPos;
@@ -322,20 +418,22 @@ void  TInputLine::handleEvent( TEvent& event )
             }
 }
 
+bool TInputLine::disableReselect = false; // for 'ovelapped' wait_boxes
 void TInputLine::selectAll( Boolean enable )
 {
-    selStart = 0;
-    if( enable )
-        curPos = selEnd = strlen(data);
-    else
-        curPos = selEnd = 0;
-    firstPos = max( 0, curPos-size.x+2 );
+    if( !disableReselect )
+    {
+        selStart = 0;
+        if( enable )
+            curPos = selEnd = strlen(data);
+        else
+            curPos = selEnd = 0;
+        firstPos = qmax( 0, curPos-size.x+2 );
 #ifndef __UNPATCHED
-    anchor = 0;                   //<----- This sets anchor to avoid deselect
-    drawView();                   //       on initial selection
-#else
-    drawView();
+        anchor = 0;               //<----- This sets anchor to avoid deselect
 #endif
+    }
+    drawView();
 }
 
 void TInputLine::setData( void *rec )

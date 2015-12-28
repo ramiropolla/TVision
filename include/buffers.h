@@ -76,7 +76,7 @@ private:
 
     friend class TVMemMgr;
 #if defined(__BORLANDC__) && !defined(__OS2__)
-    friend void * cdecl operator new( size_t );
+    friend void * __cdecl operator new( size_t );
 #else
     friend void * operator new( size_t );
 #endif
