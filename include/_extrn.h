@@ -35,6 +35,9 @@ int unlink(const char *file);
 #include <sys/types.h>
 #include <sys/stat.h>
 #endif
+#ifdef __AMD64__
+#include <time.h>
+#endif
 
 #if defined(__WATCOMC__) || !defined(__cplusplus)
 #include <string.h>
@@ -79,5 +82,35 @@ int  qvsnprintf(char *buffer, size_t n, const char *format, va_list va);
 
 #define EXTCHAR '.'
 
+#ifdef __AMD64__
+
+#define MAXDRIVE  _MAX_DRIVE
+#define MAXDIR    _MAX_DIR
+#define MAXFILE   _MAX_FNAME
+#define MAXEXT    _MAX_EXT
+#define MAXPATH   _MAX_PATH
+
+struct ffblk : public __finddata64_t
+{
+  intptr_t handle;
+};
+
+#define FA_DIREC    _A_SUBDIR
+#define FA_RDONLY   _A_RDONLY
+#define FA_ARCH     _A_ARCH
+
+#define findfirst(file,blk,attr) (((blk)->handle=_findfirst64(file,blk))==intptr_t(-1L))
+#define findnext(blk)            (_findnext64((blk)->handle,blk)!=0)
+#define findclose(blk)           _findclose((blk)->handle)
+
+#define ff_attrib   attrib
+#define ff_name     name
+#define ff_ftime    time_write
+#define ff_fsize    size
+
+#define localtime   _localtime32
+#define time_t      __time32_t
+
+#endif // __AMD64__
 
 #endif // ___extrn_h__

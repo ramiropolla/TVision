@@ -11,23 +11,34 @@
 //
 /*
  *  The following environment variables are used:
+ *     TVHEADLESS  - disable all output (for i/o redirection)
+ *                   if this variable defined, the TVOPT variable is ignored
+ *                   The modifications are loosely based on the patch by
+ *                   Christian Blichmann <christian.blichmann@zynamics.com> and
+ *                   http://www.inkatel.com/index.php/2008/05/16/idalinux-in-background-new-patch-for-tvision-release-20112007/
+ *
  *     TVLOG - the name of the log-file
  *             if it is not defined, use syslog with LOG_WARNING priority
+ *
  *     TERM  - the terminal definition (see terminfo)
+ *
  *     TVOPT - the enduser flags. Has many subfields delimited by commas ','.
  *          noX11   - when libX11.so is not compatible
  *          noGPM   - when libgpm.so is not compatible
- *                    also, when this eflag is present, and gpm does not work at
+ *                    also, when this flag is present, and gpm does not work at
  *                    the start of the program - do not trace its attachment
  *          ansi    -
  *               OR
  *          mono    - when the terminfo data of your display does not declare
  *                    it as haing the ANSI-color support
  *          ign8    - ignore '8bit as meta key' in the terminfo description
+ *          noacsc  - do not use 'acsc' table from terminfo
+ *                    (use builtin table from pseudographic chars)
+ *                    recommended if you are using unicode-font on 'linux' terminal
  *          xtrack  - if your xterm-emulator in telnet client does not support
  *                    mode 1002 (only 1000), set this flag
  *          alt866  - do not encode pseudographic symbols (for the console with
- *                    alt-font loaded)
+ *                    alt-font loaded). Implies noacsc
  *          cyrcvt= - cyrilic conversion (oem/koi8r).
  *                    possible values are:
  *            linux   - for linux russian users and PuTTY (in/out koi8r)
@@ -102,11 +113,12 @@
 /* Modified by Sergey Clushin <serg@lamport.ru>, <Clushin@deol.ru> */
 /* Modified by Dmitrij Korovkin <tkf@glasnet.ru> */
 /* Modified by Ilfak Guilfanov, <ig@datarescue.com> */
-/* Rewritten by Yury Charon, <yjh@styx.cabel.net> */
+/* Rewritten by Ioury Kharon, <yjh@styx.cabel.net> */
 
 #define USE_DANGEROUS_FUNCTIONS
 
-#if defined(__LINUX__) || defined(__MAC__)
+#if defined(__LINUX__) || defined(__MAC__) || defined(__BSD__)
+#define Uses_TApplication
 #define Uses_TButton
 #define Uses_TColorSelector
 #define Uses_TDeskTop
@@ -146,15 +158,22 @@
 #include <sys/stat.h> // console switching
 #ifdef __LINUX__
 #include <gpm.h>
+#define LIBCURSES "libcurses.so"
 #endif
 #include <curses.h>   // terminfo
 #include <term.h>
+#if !defined(__BSD__) && !defined(__arm__)
 #include <X11/Xlib.h> // X11console
-#undef buttons    // term.h
-
-#ifdef __MAC__
-typedef void (*sighandler_t)(int);
+#define X11_PRESENT
 #endif
+#undef buttons    // term.h
+#include "fdlisten.h"
+
+#if defined(__MAC__) || defined(__BSD__)
+typedef void (*sighandler_t)(int);
+#define LIBCURSES "libcurses.dylib"
+#endif
+
 
 //---------------------------------------------------------------------------
 /*
@@ -232,6 +251,7 @@ static struct termios old_tios, my_tios;
 static int    tty_mode;
 
 //X11-console (library load dynamically)
+#ifdef X11_PRESENT
 static Display  *x11_display;
 static Window   x11_window;
 static void     *hX11;
@@ -241,6 +261,8 @@ typedef Bool      (*tXQueryPointer)(Display *, Window, Window *, Window *,
                                     int *, int *, int *, int *, unsigned *);
 static tXCloseDisplay pXCloseDisplay;
 static tXQueryPointer pXQueryPointer;
+#endif
+
 //GPM (console mouse) support
 #ifdef __LINUX__
 static void   *hGPM;
@@ -253,9 +275,12 @@ static  tGpm_GetEvent pGpm_GetEvent;
 #endif
 // for terminal with !vt positioning
 static void   *hCurses;
+// For file-descriptor event processing
+std::vector<struct pollfd> *pollList;
 
-static struct pollfd  pfd_data[2];
-static int    pfd_count;
+// syncronization objects for exec_request_t
+static int functor_pipes[2];
+static void (*request_collector)(void *);
 
 /*
  * terminfo strings for current display
@@ -294,8 +319,21 @@ static struct {
         last_kbd   : 1,   // last generated event kbd (else - mouse)
         doResize   : 1,   // resize screen ?
         app_screen : 1,   // screen switched to debugged application
-        tty_owned  : 1;   // ttin/ttout handler mode is set
+        headless   : 1;   // all output disabled (for redirect) by env(TVHEADLESS)
 }work;
+#define CANT_OUT_TTY (*(uchar*)&work & 0xC0)  // app_screen || headless
+
+static struct {
+  uchar hdl_restor : 1,   // headless with NOT redirect in/out
+        _UNUSED_1  : 1,
+        _UNUSED_2  : 1,
+        _UNUSED_3  : 1,
+        _UNUSED_4  : 1,
+        _UNUSED_5  : 1,
+        _UNUSED_6  : 1,
+        tty_owned  : 1;   // ttin/ttout handler mode is set
+}work2;
+
 static uchar    last_page;      // 0-G0, 1-G1
 static uchar    last_reverse;   // 0/1 only (speed)
 
@@ -306,8 +344,8 @@ static uchar  lastMods;     /* keyboard modifiers generated by esc-seq */
 static uchar  last_color;   /* in OEM format */
 static struct {
   uchar tioc;
-  ulong from; //   struct { ushort x, y; };
-  ulong to;   //     struct { ushort x, y; };
+  uint32 from; //   struct { ushort x, y; };
+  uint32 to;   //     struct { ushort x, y; };
   union {
     uchar   cmd; // on=3, off=4;
     ushort  aligns;
@@ -424,25 +462,34 @@ get_data:
 #ifdef __MAC__
 int qpoll(pollfd *pfd, int n, int wait)
 {
-  fd_set fds;
-  struct timeval to;
-
-  FD_ZERO(&fds);
+  fd_set read_fds, write_fds;
+  struct timeval to, *top = NULL;
+  
+  FD_ZERO(&read_fds);
+  FD_ZERO(&write_fds);
   int ns = 0;
   for ( int i=0; i < n; i++ )
   {
     int fd = pfd[i].fd;
-    FD_SET(fd, &fds);
+    if (pfd[i].events & POLLIN)
+      FD_SET(fd, &read_fds);
+    if (pfd[i].events & POLLOUT)
+      FD_SET(fd, &write_fds);
     if ( fd > ns )
       ns = fd;
   }
-  to.tv_sec = 0;
-  to.tv_usec = wait;
-  int code = select(ns+1, &fds, NULL, NULL, &to);
+  if (wait != -1) {
+    to.tv_sec = 0;
+    to.tv_usec = wait;
+    top = &to;
+  }
+  int code = select(ns+1, &read_fds, &write_fds, NULL, top);
   if ( code > 0 )
   {
     for ( int i=0; i < n; i++ )
-      pfd[i].revents = FD_ISSET(pfd[i].fd, &fds) ? POLLIN : 0;
+      if (pfd[i].fd != -1)
+        pfd[i].revents = (FD_ISSET(pfd[i].fd, &read_fds) ? POLLIN : 0) |
+                         (FD_ISSET(pfd[i].fd, &write_fds) ? POLLOUT : 0);
   }
   return code;
 }
@@ -450,8 +497,47 @@ int qpoll(pollfd *pfd, int n, int wait)
 #endif
 
 //---------------------------------------------------------------------------
+static void init_functor_objects(void)
+{
+  if ( pipe(functor_pipes) != 0 )
+    error("tvlinux: failed to create syncronization objects\n");
+}
+
+//---------------------------------------------------------------------------
+static void term_functor_objects(void)
+{
+  close(functor_pipes[0]);
+  close(functor_pipes[1]);
+}
+
+//---------------------------------------------------------------------------
+void send_request_to_main_thread(void *req)
+{
+  if ( write(functor_pipes[1], &req, sizeof(req)) != sizeof(req) )
+    abort();
+}
+
+//---------------------------------------------------------------------------
+// Store asynchronious event in the queue
+static void handle_exec_request(void)
+{
+  void *req;
+  if ( read(functor_pipes[0], &req, sizeof(req)) == sizeof(req) )
+    request_collector(req);
+}
+
+//---------------------------------------------------------------------------
+// Register a callback for asycnhronious exec requests
+void register_request_collector(void (*func)(void *))
+{
+  request_collector = func;
+}
+
+//---------------------------------------------------------------------------
 static void term_out(const char *buf, size_t len)
 {
+    if(work.headless) return;
+
     size_t  sz;
     int     svm = -1;
 
@@ -489,6 +575,7 @@ bad:
          error("TTY-output failed");
       }
 }
+
 //---------------------------------------------------------------------------
 static inline void xmouse_send(void)
 {
@@ -628,23 +715,83 @@ skip_color:
 }
 
 //---------------------------------------------------------------------------
+//---------------------------------------------------------------------------
+static uchar trans_pgr_low[0x1F -0x10 + 1] = {
+    '>',  // 0x10 -- big arrow right
+    '<',  // 0x11 -- big arrow left
+    0,
+    '!',  // 0x13 -- double '!'
+    0, 0, 0,
+    'o',  // 0x17 -- arrow up-down
+    '^',  // 0x18 -- arrow up
+    'v',  // 0x19 -- arrow down
+    '>',  // 0x1A -- arrow right
+    '<',  // 0x1B -- arrow left
+    0,
+    '-',  // 0x1D -- arrow left-right
+    '^',  // 0x1E -- big arrow up
+    'v'   // 0x1F -- big arrow down
+};
+
+static uchar trans_pgr_high[0xDA - 0xB0 + 1] = {
+    'a',  // B0 -- light-filled
+    'a',  // B1 -- middle-filled
+    'a',  // B2 -- dark-filled
+    'x',  // B3 -- vertical line
+    'u',  // B4 -- T to left
+    'u',  // B5 -- T to left (gor=2, vert=1)
+    'u',  // B6 -- T to left (gor=1, vert=2)
+    'k',  // B7 -- up-left corner (vert=2, hor=1)
+    'k',  // B8 -- -"- (vert=1, hor=2)
+    'u',  // B9 -- T to right (vert=1, hor=2)
+    'x',  // BA -- double vert line
+    'k',  // BB -- double right-up corner
+    'j',  // BC -- double righ-down corner
+    'j',  // BD -- right-down corner (vert=2, hor=1)
+    'j',  // BE -- -"- (vert=1, hor=2)
+    'k',  // BF -- right-up corner
+    'm',  // C0 -- left-down corner
+    'v',  // C1 -- T to up
+    'w',  // C2 -- T to down
+    't',  // C3 -- T to right
+    'q',  // C4 -- horizontal line
+    'n',  // C5 -- big plus (crest)
+    't',  // C6 -- T to right (vert=1, hor=2)
+    't',  // C7 -- -"- (vert=2, hor=1)
+    'm',  // C8 -- double left-down corner
+    'l',  // C9 -- double left-up corner
+    'v',  // CA -- T to up (double)
+    'w',  // CB -- T to down (double)
+    't',  // CC -- T to right (double)
+    'q',  // CD -- double horizontal line
+    'n',  // CE -- double big plus (crest)
+    'v',  // CF -- T to up (hor=2, vert=1)
+    'v',  // D0 -- -"- (hor=1, vert=2)
+    'w',  // D1 -- T to down (hor=2, vert=1)
+    'w',  // D2 -- -"- (hor=1, vert=2)
+    'm',  // D3 -- left-down corner (vert=2, hor=1)
+    'm',  // D4 -- -"- (vert=1, hor=2)
+    'l',  // D5 -- veft-up corner (vert=1, hor=2)
+    'l',  // D6 -- -"- (vert=2, hor=1)
+    'n',  // D7 -- big plus (creast) (vert=2, hor=1)
+    'n',  // D8 -- -"- (vert=1, hor=2)
+    'j',  // D9 -- right-down corner
+    'l'   // DA -- left-up corner
+};
+
+//---------------------------------------------------------------------------
 static char *output_colored_char_to_buf(unsigned cc, char *buf)
 {
     char  *ptr = buf;
-    uchar code;
+    uchar code, needed_page = 0, reverse = 0, pseudogr = 0;
 
     code  = (uchar)cc;
     if(code < 0x20 && !mode.alt866_font) {
-      static const uchar arrow[] =
-        { 0x10, 0x11, 0x13, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1D, 0x1E, 0x1F };
-      static const uchar ar_to[sizeof(arrow)+2] = "><!o^v><-^v\xFE";
-
-      unsigned of = (uchar*)memchr(arrow, code, sizeof(arrow)) - arrow;
-      if(of > sizeof(arrow)) of = sizeof(arrow);  // thick dot
-      code = ar_to[of];
+      if(code >= 0x10 && (code = trans_pgr_low[code - 0x10]) != 0) ++pseudogr;
+      else code = /* 0xFE*/ 0x7E;  // thick dot
+      goto apply_page;
     }
 
-    uchar needed_page = 0, reverse = 0;
     if(!page_G1) {
       if(code >= 0xDB && code < 0xE0) goto out_mark_space;
       if(code == 0xFE && !mode.alt866_font) code &= 0x7F;  // =>7E(~)
@@ -654,16 +801,6 @@ no_change_page:
         needed_page = last_page;
       }
     } else if(code >= 0xB0) {
-      static const uchar trans[] =
-      {
-      /* B0 */ 0x61, 0x61, 0x61, 0x78, 0x75, 0x75, 0x75, 0x6B,
-      /* B8 */ 0x6B, 0x75, 0x78, 0x6B, 0x6A, 0x6A, 0x6A, 0x6B,
-      /* C0 */ 0x6D, 0x76, 0x77, 0x74, 0x71, 0x6E, 0x74, 0x74,
-      /* C8 */ 0x6D, 0x6C, 0x76, 0x77, 0x74, 0x71, 0x6E, 0x76,
-      /* D0 */ 0x76, 0x77, 0x77, 0x6D, 0x6D, 0x6C, 0x6C, 0x6E,
-      /* D8 */ 0x6E, 0x6A, 0x6C
-      };
-
       if(code == 0xFE) {
         if(!mode.alt866_font) code &= 0x7E;  // =>7E(thick dot)
         goto do_first_page;
@@ -675,14 +812,18 @@ out_mark_space:
           code = ' ';
           goto no_change_page;
         }
-        if(!mode.alt866_font) code = trans[code-0xB0];
+        if(!mode.alt866_font) {
+          code = trans_pgr_high[code-0xB0];
+          ++pseudogr;
+        }
 do_first_page:
         ++needed_page;
       }
     }
 
+apply_page:
     ptr = set_color_page((uchar)(cc >> 8), ptr, reverse, needed_page);
-    if(code >= 0x80 && !mode.doscyr_nout) {
+    if(code >= 0x80 && !pseudogr && !mode.doscyr_nout) {
       static const uchar dos2koi1[0xAF-0x80+1] = { // cyr A-p
         0xE1, 0xE2, 0xF7, 0xE7, 0xE4, 0xE5, 0xF6, 0xFA,
         0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF, 0xF0,
@@ -734,15 +875,15 @@ static int    msOldButtons;     /* mouse button state (ignoring reverse) */
 
 class Timer
 {
-        ulong limit;
+        uint32 limit;
 public:
         Timer() { limit = (uint)-1; }
-        bool isExpired(ulong curTime) { return(curTime >= limit); }
+        bool isExpired(uint32 curTime) { return(curTime >= limit); }
         bool isRunning() { return(limit != (uint)-1); }
-        void set(ulong endTime) { limit = endTime; }
+        void set(uint32 endTime) { limit = endTime; }
         void stop() { limit = (uint)-1; }
-        ulong getLimit() { return(limit); } // for escTimer and poll
-        bool inWait(ulong curTime) { return((long)curTime <= (long)limit); }
+        uint32 getLimit() { return(limit); } // for escTimer and poll
+        bool inWait(uint32 curTime) { return((int32)curTime <= (int32)limit); }
 };
 
 static Timer msAutoTimer;       /* time when generate next cmMouseAuto */
@@ -761,8 +902,8 @@ static inline int range(int test, int min, int max)
 }
 
 //---------------------------------------------------------------------------
-static ulong _timeBase;
-static ulong get_system_time(void)
+static uint32 _timeBase;
+static uint32 get_system_time(void)
 {
     struct timeval  tv;
 
@@ -771,7 +912,7 @@ static ulong get_system_time(void)
 }
 
 //---------------------------------------------------------------------------
-ulong getTicks(void)
+uint32 getTicks(void)
 {
     return(get_system_time() / 18);
 }
@@ -1144,6 +1285,7 @@ uchar getShiftState(void)
     uchar shift = 0;
     int   cmsk;
 
+#ifdef X11_PRESENT
     if(x11_display) {
       unsigned  gmsk;
       Window    root, child;
@@ -1160,6 +1302,8 @@ uchar getShiftState(void)
 #endif
       return state2tvstate(cmsk);
     }
+#endif
+
 
 #ifdef __LINUX__
     cmsk = 6;    /* TIOCLINUX function #6 */
@@ -1215,7 +1359,7 @@ static uchar create_xmouse_event(TEvent &ev, uchar xm_data[3])
 
     whF = whC = 0;
     if(msev.mouse.where != me) whF |= meMouseMoved;
-    ulong curTime = get_system_time();
+    uint32 curTime = get_system_time();
     switch(event & ~0x1C) { // modifiers check later
       case MouseB2Down: // middle button
         msDblCTimer.stop();
@@ -1268,8 +1412,11 @@ down_event:
     ev.mouse.eventFlags = whF;
     ev.mouse.where.x = range(me.x, 0, TScreen::screenWidth - 1);
     ev.mouse.where.y = range(me.y, 0, TScreen::screenHeight - 1);
+#ifdef X11_PRESENT
     if(x11_display || work.pc_console) whF = getShiftState();
-    else {
+    else
+#endif
+    {
       whF = 0;
       if(event &    4) whF |= kbShift;
       if(event &    8) whF |= kbAltShift;
@@ -1289,7 +1436,7 @@ static void draw_pointer(void)
 }
 
 //---------------------------------------------------------------------------
-static uchar restart_gpm(signed char close_needed, ulong curTime)
+static uchar restart_gpm(signed char close_needed, uint32 curTime)
 {
     Gpm_Connect   gc;
     char          *p, save = 0; // = for gcc bug
@@ -1299,7 +1446,7 @@ static uchar restart_gpm(signed char close_needed, ulong curTime)
         pGpm_Close();
         //PASS THRU
       case 0:
-        pfd_count   = 1;
+        pollList->at(1).events = POLLIN;
         con_mou.cmd = 4; // no redraw
         //PASS THRU
       case -1:
@@ -1314,10 +1461,10 @@ static uchar restart_gpm(signed char close_needed, ulong curTime)
     gc.maxMod       = ~0; // else cutting :(
     gc.defaultMask  = 0;
     gc.eventMask    = ~0;
-    if((pfd_data[1].fd = pGpm_Open(&gc, 0)) >= 0) {
+    if((pollList->at(1).fd = pGpm_Open(&gc, 0)) >= 0) {
       if(close_needed == -1) goto stop_gpm; // init ONLY
       if(!work.app_screen) LOG("GPM started");
-      ++pfd_count;
+      pollList->at(1).events = POLLIN;
       draw_pointer();     // hide pointer
       gpmReopenTimer.stop();
     } else {
@@ -1357,7 +1504,7 @@ reread:
         error("Unknown Gpm_GetEvent answer code %d", res);
     }
 
-    con_mou.from = con_mou.to = *(ulong *)&ge.x;
+    con_mou.from = con_mou.to = *(uint32 *)&ge.x;
     if(MOUSE_HIDE) return(0);
 
     if(ge.type & GPM_MFLAG) {
@@ -1413,7 +1560,7 @@ static void xmouse_up(TEvent &event)
 
 //---------------------------------------------------------------------------
 /* Reads a key from the keyboard or mouse */
-static void get_key_mouse_event(TEvent &event, ulong curTime)
+static void get_key_mouse_event(TEvent &event, uint32 curTime)
 {
     /* if working on the console and gpm is not present at start...*/
 #ifdef __LINUX__
@@ -1441,41 +1588,58 @@ static void get_key_mouse_event(TEvent &event, ulong curTime)
     start_code  = 0;  // only for drop gcc diagnostic :(
     wait        = TProgram::event_delay;
 
+    issuingFdCallbacks++;
 read_next:
     /* wait or check */
+    struct pollfd *pfd_data = &(pollList->at(0));
+    int pfd_count = pollList->size();
     switch(code = poll(pfd_data, pfd_count, wait)) {
       case -1:    // error
         if(errno == EINTR) goto check_wait; // only SIGWINCH :)
         //PASS THRU
-      default:
 sys_err:
         abort();  // system error
 
       case 0:     // timeout
+        if (--issuingFdCallbacks == 0)
+          processQueuedFdActions();
         goto no_sequence;
 
-      case 2:
-      case 1:
-        if(pfd_count > 1 && pfd_data[1].revents) {
+      default:
+        // Check for events on other descriptors.
+        for (int i = 3; i < pfd_count; i++)
+          if (pfd_data[i].revents)
+            notifyFdListeners(pfd_data[i].fd, pfd_data[i].revents);
+        // Are we listening for GPM events, and if so, did one arrive?
+        if(pfd_data[1].events && pfd_data[1].revents) {
+          // GPM event has arrived.
           work.last_kbd = 0;
-          if(create_gpm_event(event)) return;
-          if(!--code) goto check_wait;
+          if(create_gpm_event(event)) {
+            issuingFdCallbacks--;
+            return;
+          }
         }
-        if(code != 1) goto sys_err; // PARANOYA
         if(pfd_data[0].revents & POLLHUP) goto sys_err;
         if(pfd_data[0].revents & POLLIN) {
           if(con_mou.cmd == 4 && MOUSE_SHOW) --con_mou.cmd; // redraw
           if((code = qgetch()) > 0) break; // -1 if EOF, 0 if cbrk/busy
         }
+        if(pfd_data[2].revents & POLLIN)
+          handle_exec_request();
 check_wait:
         if(seq_stage) goto read_next;
 no_data:
+        seq_stage = 0;  // for repeat after unrecognized sequence
         if(  (wait = TProgram::event_delay) != 0
           && (wait -= (get_system_time() - curTime)) > 0) goto read_next;
         event.what = evNothing;
+        if (--issuingFdCallbacks == 0)
+          processQueuedFdActions();
         return;
     } // switch(poll)
-
+    if (--issuingFdCallbacks == 0)
+      processQueuedFdActions();
+    
     /* see if there is data available */
     if(seq_stage) {
       if(seq_stage < 0) goto xm_next_char;
@@ -1484,13 +1648,20 @@ apply_sequence:
 no_sequence:
         switch(seq_stage) {
           default:  // non-started sequence OR bad sequence
+            issuingFdCallbacks++;
             goto no_data;
           case 1:
-            if(code && !lastMods) goto no_data; // !code - char, else Alt-Esc
+            if(code && !lastMods) {
+              issuingFdCallbacks++;
+              goto no_data; // !code - char, else Alt-Esc
+            }
             code = start_code;
             break;  // apply_symbol;
           case -1:
-            if((code = overlapXmice_code) == 0) goto no_data;
+            if((code = overlapXmice_code) == 0) {
+              issuingFdCallbacks++;
+              goto no_data;
+            }
             lastMods = overlapXmice_mods;
             break;  // apply_symbol;
         }
@@ -1504,7 +1675,10 @@ no_sequence:
 xm_next_char:
           xm_data[-seq_stage - 1] = (uchar)code;
         }
-        if(!create_xmouse_event(event, xm_data)) goto no_data;
+        if(!create_xmouse_event(event, xm_data)) {
+          issuingFdCallbacks++;
+          goto no_data;
+        }
         work.last_kbd = 0;
         return;
       }
@@ -1516,6 +1690,7 @@ xm_next_char:
       if((code = qgetch()) != EOF) goto apply_sequence;
 do_wait_next_seq:
       wait = DELAY_ESC;
+      issuingFdCallbacks++;
       goto read_next;
     }
 
@@ -1585,10 +1760,10 @@ static char *reinit_screen(uchar crs_hide, char *dbgbuf = NULL)
 }
 
 //---------------------------------------------------------------------------
-static void attach_tty(void)
+static void attach_tty(void)  // if work.headless - never call
 {
-    if(work.tty_owned) return;
-    work.tty_owned = 1;
+    if(work2.tty_owned) return;
+    work2.tty_owned = 1;
 
     if(!logname) openlog(PRG_LOG_NAME, 0, LOG_USER);
 
@@ -1600,8 +1775,8 @@ static void attach_tty(void)
 //---------------------------------------------------------------------------
 static void detach_tty()
 {
-    if(!work.tty_owned) return;
-    work.tty_owned = 0;
+    if(!work2.tty_owned) return; // if work.headless always return
+    work2.tty_owned = 0;
 
     set_mouse_attach(0);    // detach mouse
     reinit_screen(0);       // ... and show cursor
@@ -1620,7 +1795,8 @@ static void sigHandler(int signo)
       error("Stopped at signal %d", signo);
     }
 
-    work.doResize = 1;
+    if(!work.headless)
+      work.doResize = 1;
 }
 
 //---------------------------------------------------------------------------
@@ -1631,7 +1807,7 @@ static void sigHandler(int signo)
 //---------------------------------------------------------------------------
 void TScreen::resume()
 {
-    attach_tty();
+    if(!work.headless) attach_tty();  // else never set tty_owned
 }
 
 //---------------------------------------------------------------------------
@@ -1755,7 +1931,7 @@ void TScreen::getEvent(TEvent &event)
       return;
     }
 
-    ulong curTime = get_system_time();
+    uint32 curTime = get_system_time();
     if(msAutoTimer.isExpired(curTime)) {
       msAutoTimer.set(curTime + DELAY_AUTOCLICK_NEXT);
       event = msev;
@@ -1782,7 +1958,7 @@ void TScreen::getEvent(TEvent &event)
  */
 void TScreen::makeBeep(void)
 {
-    if(!work.app_screen && bell_line) tistr_out(bell_line);
+    if(!CANT_OUT_TTY && bell_line) tistr_out(bell_line);
 }
 
 //---------------------------------------------------------------------------
@@ -1805,7 +1981,7 @@ void TScreen::putEvent(TEvent &event)
  */
 void TScreen::drawCursor(int show)
 {
-    if(!work.app_screen && !show != cursor_hide) {
+    if(!CANT_OUT_TTY && !show != cursor_hide) {
       cursor_hide ^= 1;
       if(show) immediate_curs_moveto(curX, curY);
       if(cur_invis) tistr_out(show ? cur_vis : cur_invis);
@@ -1818,11 +1994,11 @@ void TScreen::drawCursor(int show)
  */
 void TScreen::moveCursor(int x, int y)
 {
-    if(work.app_screen) return;
-
-    immediate_curs_moveto(x, y);
-    curX = x;
-    curY = y;
+    if(!CANT_OUT_TTY) {
+      immediate_curs_moveto(x, y);
+      curX = x;
+      curY = y;
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -1835,7 +2011,7 @@ void TScreen::writeRow(int dst, ushort *src, int len)
 
     register char *ptr, *top;
 
-    if(work.app_screen) return;
+    if(CANT_OUT_TTY) return;
 
     ptr = outbuf;
     top = ptr + (sizeof(outbuf)-2 - 200);
@@ -1863,9 +2039,9 @@ void TEventQueue::mouseInt(void) { /* no mouse... */ }
 
 //---------------------------------------------------------------------------
 /* Show/Hide mouse */
-static void set_mouse_show(uchar show)
+static void set_mouse_show(uchar show)  // never call if work.headless
 {
-    if(work.app_screen) return;
+    if(CANT_OUT_TTY) return;
 
 // really we show/unshow only GPM mouse. But when mouse is OFF,
 // we disable mouse reporting to minimize the number of events
@@ -1892,7 +2068,7 @@ static void set_mouse_show(uchar show)
 
 //---------------------------------------------------------------------------
 /* Get/Free mouse for current job. */
-static void set_mouse_attach(char get)
+static void set_mouse_attach(char get)  // never call if work.headless
 {
     if(!XMOU_CMD_BYTE == !get) return;
 
@@ -1904,9 +2080,9 @@ static void set_mouse_attach(char get)
     if(hGPM) {
       if(!get) {
         gpmReopenTimer.stop();  // PARANOYA
-        if(pfd_count > 1) {
+        if(pollList->at(1).events) {
           set_mouse_show('l');  // this needed for switch_screen
-          --pfd_count;
+          pollList->at(1).events = 0;
           pGpm_Close();
         }
       } else if(hGPM) restart_gpm(0, 0);
@@ -1929,7 +2105,8 @@ static void set_mouse_attach(char get)
 //---------------------------------------------------------------------------
 void THWMouse::resume(void)
 {
-    buttonCount = 2;
+    if(!work.headless)
+      buttonCount = 2;
 }
 
 //---------------------------------------------------------------------------
@@ -1941,18 +2118,20 @@ void THWMouse::suspend(void)
 //---------------------------------------------------------------------------
 void TV_CDECL THWMouse::show(void)
 {
-    set_mouse_show('h');  // on
+    if(!work.headless)
+      set_mouse_show('h');  // on
 }
 
 //---------------------------------------------------------------------------
 void TV_CDECL THWMouse::hide(void)
 {
-    set_mouse_show('l');  // off
+    if(!work.headless)
+      set_mouse_show('l');  // off
 }
 
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
-static size_t get_csize(void)
+static size_t get_csize(void) // never call if work.headless
 {
     winsize csize;
 
@@ -1960,7 +2139,9 @@ static size_t get_csize(void)
     return(csize.ws_col * csize.ws_row * 2 + 4);
 }
 
-static int fd_ssave;  // -1 if xterm, /dev/vc/%c if console, 0 - others
+static int fd_ssave;  // -1         if xterm or work.headless,
+                      // /dev/vc/%c if console
+                      // 0          others
 
 // 1 - application screen
 // 0 - TV screen
@@ -1969,6 +2150,8 @@ static int fd_ssave;  // -1 if xterm, /dev/vc/%c if console, 0 - others
 // return: false if switching can't be realized or invalid status.
 bool TProgram::switch_screen(int to_user)
 {
+    if(work.headless) return true;
+
     static ssize_t  user_bfsz;
     static void     *user_buf;
     static termios  user_tios;
@@ -2067,8 +2250,10 @@ done:
 // unix inherit ttyin chanel status :(
 void TProgram::at_child_exec(bool before)
 {
-  if(fcntl(0, F_SETFL, tty_mode | (before ? 0 : O_NONBLOCK)) == -1)
-    abort();
+  if(!work.headless) {
+    if(fcntl(0, F_SETFL, tty_mode | (before ? 0 : O_NONBLOCK)) == -1)
+      abort();
+  }
 }
 
 //---------------------------------------------------------------------------
@@ -2144,20 +2329,18 @@ static uchar termout_init(signed char noansi, unsigned char std_term)
     if((cur_vis = load_pstr("ve")) != NULL) // cnorm
         cur_invis = load_pstr("vi");        // civis  (also as FLAG)
 
-    if(   (page_G0 = load_pstr("ae")) != NULL     // rmacs
-       && (page_G1 = load_pstr("as")) != NULL     // smacs
-       && (pages_init = load_pstr("eA")) == NULL  // enacs (enable alt-pages)
-       && std_term == 1   // BUG (terminfo/vt emulator in linux)
-       && *page_G0 == sizeof("\e[10m")-1
-       && !memcmp(page_G0 + 1, "\e[10m", sizeof("\e[10m")-1)) {
+    if(   (page_G0 = load_pstr("ae")) == NULL     // rmacs
+       || (page_G1 = load_pstr("as")) == NULL     // smacs
+       || (pages_init = load_pstr("eA")) != NULL  // enacs (enable alt-pages)
+       || std_term != 1   // BUG (terminfo/vt emulator in linux)
+       || *page_G0 != sizeof("\e[10m")-1
+       || memcmp(page_G0 + 1, "\e[10m", sizeof("\e[10m")-1)) return(1);
 
-      free((void *)page_G0);
-      free((void *)page_G1);
-      page_G0 = "\x01\x0F";
-      page_G1 = "\x01\x0E";
-    }
-
-    return(1);
+    free((void *)page_G0);
+    free((void *)page_G1);
+    page_G0 = "\x01\x0F";
+    page_G1 = "\x01\x0E";
+    return(2);
 }
 
 //-----------------------------------------------------
@@ -2180,7 +2363,7 @@ static void termout_internal(uchar std_term)  // 1 - linux, 2 xterm
         page_G1   = "\x05\e[12m";
         break;
       default: // xterm, xterm-sco...
-        pages_init  = "\x07\e(B\e)0";
+        pages_init  = "\x06\e(B\e)0";
         break;
     }
 }
@@ -2461,7 +2644,7 @@ static void termkbd_init(signed char std_term)
     // keypad
       { kbK5,        0, "K2", "EOE",    "[G",   _EMP_ }, // kb2 (center of keypad)
     // non-standart addonce
-      { kbCtrlIns,   C, "&6", _EMP_,    _EMP_,  "[<"  }, // ksav (last scokey)
+      { kbCtrlIns,   C, "&6", _EMP_,    _EMP_,  "[>"  }, // ksav (last scokey)
     // MUST be last!
       { kbMouse,     0, "Km", "[M",     "[M",   _EMP_ }  // kmous (sco - alias)
     };
@@ -2484,10 +2667,10 @@ static void termkbd_init(signed char std_term)
       }
       if(std_term != 3) goto remap_del2bs; // xterm for PuTTy only)
     } else {
-      if((p = Pgetstr("kb", NULL)) != NULL) { // kbs
+      if((p = Pgetstr((char*)"kb", NULL)) != NULL) { // kbs
         if(*(ushort *)p == 127) goto remap_del2bs;
       } // not 'else' => force delete as backspace always when possible
-      if((p = Pgetstr("kD", NULL)) == NULL || *(ushort *)p != 127) { // kdch1
+      if((p = Pgetstr((char*)"kD", NULL)) == NULL || *(ushort *)p != 127) { // kdch1
 remap_del2bs:
         remap_del_idx = REMAP_DEL2BS;
       }
@@ -2518,6 +2701,7 @@ print_err_code:
       }
     }
 
+    if(work.headless) goto xmice_done;
 /* standart definitions (overlap bad clients/records) */
     if((i = findkey("[M")) == 0) { // can add
       if(work.have_xmice) goto set_mice_key;
@@ -2653,6 +2837,134 @@ no_append_rxvt:
 }
 
 //---------------------------------------------------------------------------
+static void load_pseudographics(void)
+{
+  size_t sz;
+  unsigned bugs = 0;
+  const uchar *p = (uchar *)get_pstr("ac", &sz);  // acsc
+
+  if(!p) return;
+  if(!(sz /= 2)) goto bug_string;
+
+  do  {
+    uchar from = *p, to = p[1];
+    p += 2;
+    if(!to) ++bugs;
+    else if(from != to) switch(from) {
+      default:
+        ++bugs;
+        //PASS THRU
+      case '}': // UK pound sign            ACS_STERLING       -
+      case 'f': // degree symbol            ACS_DEGREE         0xF8
+      case 'z': // greater-than-or-equal-to ACS_GEQUAL         -
+      case 'y': // less-than-or-equal-to    ACS_LEQUAL         -
+      case 'g': // plus/minus               ACS_PLMINUS        -
+      case '{': // greek pi                 ACS_PI             -
+      case '|': // not-equal                ACS_NEQUAL         -
+      case '~': // bullet                   ACS_BULLET         0xF9
+      case '`': // diamond                  ACS_DIAMOND        0xF
+      case 'i': // lantern symbol           ACS_LANTERN        0x8(?)
+      case 'o': // scan line 1              ACS_S1             -
+      case 'p': // scan line 3              ACS_S3             -
+      case 'r': // scan line 7              ACS_S7             -
+      case 's': // scan line 9              ACS_S9             -
+      case '0': // solid square block       ACS_BLOCK          0xDB
+      case 'h': // board of squares         ACS_BOARD          (invalid in emulators!)
+        break;
+
+      case 'a': // checker board (stipple)  ACS_CKBOARD        :
+        trans_pgr_high[0xB0 - 0xB0] = to; // filled: light
+        trans_pgr_high[0xB1 - 0xB0] = to; // -"-: middle
+        trans_pgr_high[0xB2 - 0xB0] = to; // -"-: dark (possible 'h'?)
+        break;
+
+      case '-': // arrow pointing up        ACS_UARROW
+        trans_pgr_low[0x18 - 0x10] = to;  // arrow up: normal
+        trans_pgr_low[0x1E - 0x10] = to;  // -"-: big
+        break;
+      case '.': // arrow pointing down      ACS_DARROW
+        trans_pgr_low[0x19 - 0x10] = to;  // arrow down: normal
+        trans_pgr_low[0x1F - 0x10] = to;  // -"-: big
+        break;
+      case '+': // arrow pointing right     ACS_RARROW
+        trans_pgr_low[0x1A - 0x10] = to;  // arrow right: normal
+        trans_pgr_low[0x10 - 0x10] = to;  // -"-: big
+        break;
+      case ',': // arrow pointing left      ACS_LARROW
+        trans_pgr_low[0x1B - 0x10] = to;  // arrow left: normal
+        trans_pgr_low[0x11 - 0x10] = to;  // -"-: big
+        break;
+      case 'q': // horizontal line          ACS_HLINE
+        trans_pgr_high[0xC4 - 0xB0] = to; // horizontal line: single
+        trans_pgr_high[0xCD - 0xB0] = to; // -"-: double
+        break;
+      case 'x': // vertical line            ACS_VLINE
+        trans_pgr_high[0xB3 - 0xB0] = to; // vertical line: single
+        trans_pgr_high[0xBA - 0xB0] = to; // -"-: double
+        break;
+      case 'n': // large plus or crossover  ACS_PLUS
+        trans_pgr_high[0xC5 - 0xB0] = to; // big plus (crest): single
+        trans_pgr_high[0xCE - 0xB0] = to; // -"-: double
+        trans_pgr_high[0xD7 - 0xB0] = to; // -"-: vert=2, hor=1
+        trans_pgr_high[0xD8 - 0xB0] = to; // -"-: vert=1, hor=2
+        break;
+      case 'm': // lower left corner        ACS_LLCORNER
+        trans_pgr_high[0xC0 - 0xB0] = to; // left-down corner: single
+        trans_pgr_high[0xC8 - 0xB0] = to; // -"-: double
+        trans_pgr_high[0xD3 - 0xB0] = to; // -"-: vert-2, hor-1
+        trans_pgr_high[0xD4 - 0xB0] = to; // -"-: vert=1, hor=2
+        break;
+      case 'j': // lower right corner       ACS_LRCORNER
+        trans_pgr_high[0xBC - 0xB0] = to; // right-down corner: double
+        trans_pgr_high[0xBD - 0xB0] = to; // -"-: vert=2, hor=1
+        trans_pgr_high[0xBE - 0xB0] = to; // -"-: vert=1, hor=2
+        trans_pgr_high[0xD9 - 0xB0] = to; // -"-: single
+        break;
+      case 'l': // upper left corner        ACS_ULCORNER
+        trans_pgr_high[0xC9 - 0xB0] = to; // left-up corner: double
+        trans_pgr_high[0xD5 - 0xB0] = to; // -"-: vert=1, hor=2
+        trans_pgr_high[0xD6 - 0xB0] = to; // -"-: vert=2, hor=1
+        trans_pgr_high[0xDA - 0xB0] = to; // -"-: single
+        break;
+      case 'k': // upper right corner       ACS_URCORNER
+        trans_pgr_high[0xB7 - 0xB0] = to; // right-up corner: vert=2, hor=1
+        trans_pgr_high[0xB8 - 0xB0] = to; // -"-: vert=1, hor=2
+        trans_pgr_high[0xBB - 0xB0] = to; // -"-: double
+        trans_pgr_high[0xBF - 0xB0] = to; // -"-: single
+        break;
+      case 'w': // tee pointing down        ACS_TTEE
+        trans_pgr_high[0xC2 - 0xB0] = to; // T to down: single
+        trans_pgr_high[0xCB - 0xB0] = to; // -"-: double
+        trans_pgr_high[0xD1 - 0xB0] = to; // -"-: hor=2, vert=1
+        trans_pgr_high[0xD2 - 0xB0] = to; // -"-: hor=1, vert=2
+        break;
+      case 'u': // tee pointing left        ACS_RTEE
+        trans_pgr_high[0xB4 - 0xB0] = to; // T to left: single
+        trans_pgr_high[0xB5 - 0xB0] = to; // -"-: hor=2, vert=1
+        trans_pgr_high[0xB6 - 0xB0] = to; // -"-: hor=1, vert=2
+        trans_pgr_high[0xB9 - 0xB0] = to; // -"-: double
+        break;
+      case 't': // tee pointing right       ACS_LTEE
+        trans_pgr_high[0xC3 - 0xB0] = to; // T to right: single
+        trans_pgr_high[0xC6 - 0xB0] = to; // -"-: hor=2, vert=1
+        trans_pgr_high[0xC7 - 0xB0] = to; // -"-: hor=1, vert=2
+        trans_pgr_high[0xCC - 0xB0] = to; // -"-: double
+        break;
+      case 'v': // tee pointing up          ACS_BTEE
+        trans_pgr_high[0xC1 - 0xB0] = to; // T to up: single
+        trans_pgr_high[0xCA - 0xB0] = to; // -"-: double
+        trans_pgr_high[0xCF - 0xB0] = to; // -"-: hor=2, vert=1
+        trans_pgr_high[0xD0 - 0xB0] = to; // -"-: hor=1, vert=2
+        break;
+    }
+  }while(--sz);
+  if(bugs) {
+bug_string:
+    LOG("Unknown/unsupported description(s) in 'acsc' string");
+  }
+}
+
+//---------------------------------------------------------------------------
 static void set_all_signals(sighandler_t handler)
 {
     signal(SIGWINCH, handler);
@@ -2661,6 +2973,8 @@ static void set_all_signals(sighandler_t handler)
     signal(SIGHUP,  handler);
     signal(SIGUSR1, handler);
     signal(SIGUSR2, handler);
+
+    if(work.headless) signal(SIGTTOU, SIG_IGN);
 }
 
 //---------------------------------------------------------------------------
@@ -2671,18 +2985,35 @@ TScreen::~TScreen()
     delete[] TScreen::screenBuffer;
 
     detach_tty();
+    if(work2.hdl_restor)
+      tcsetattr(0, TCSAFLUSH, &old_tios);
 
     set_all_signals(SIG_DFL);
 
 //X11-console
+#ifdef X11_PRESENT
     if(x11_display) {
       pXCloseDisplay(x11_display);
       dlclose(hX11);
     }
+#endif
 #ifdef __LINUX__
     if(hGPM)    dlclose(hGPM);
 #endif
     if(hCurses) dlclose(hCurses);
+
+    term_functor_objects();
+}
+
+//---------------------------------------------------------------------------
+static void inline copy_tios(void)
+{
+    my_tios = old_tios;
+    my_tios.c_iflag |= (IGNBRK | BRKINT); // Ignore breaks
+    my_tios.c_iflag &= ~(IXOFF | IXON);   // Disable Xon/off
+    my_tios.c_lflag &= ~(ICANON | ECHO | ISIG); // Character oriented, no echo, no signals
+    my_tios.c_oflag |= OPOST;  // apply special output sequence
+    my_tios.c_cc[VMIN] = 1;
 }
 
 //---------------------------------------------------------------------------
@@ -2691,23 +3022,25 @@ TScreen::TScreen(void)
     static  uchar loaded;
 
     char  *p, *ps;
-    signed char no_x11, noansi, no_gpm, ign_meta8;
+    // really signed needed only for noansi and no_gpm. All others only compat
+    signed char no_x11, noansi, no_gpm, ign_meta8, noacsc;
 
     if(loaded) error("Multiple TV instances");
     ++loaded;
 
-    if(   !isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)
-       || (tty_mode = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
-       || (tty_mode & O_ACCMODE) != O_RDWR
-       || tcgetattr(STDIN_FILENO, &old_tios))
+    if(getenv("TVHEADLESS")) {
+      if(isatty(STDOUT_FILENO))
+        error("Wnen TVHEADLESS is defined, stdout must be redirected");
+      work.headless = 1;
+    } else {
+      if(  !isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)
+         || (tty_mode = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
+         || (tty_mode & O_ACCMODE) != O_RDWR
+         || tcgetattr(STDIN_FILENO, &old_tios))
                         error("Can not work with redirected stdin/stdout");
 
-    my_tios = old_tios;
-    my_tios.c_iflag |= (IGNBRK | BRKINT); // Ignore breaks
-    my_tios.c_iflag &= ~(IXOFF | IXON);   // Disable Xon/off
-    my_tios.c_lflag &= ~(ICANON | ECHO | ISIG); // Character oriented, no echo, no signals
-    my_tios.c_oflag |= OPOST;  // apply special output sequence
-    my_tios.c_cc[VMIN] = 1;
+      copy_tios();
+    }
 
     if((p = getenv("TVLOG")) != NULL && *p) {
       FILE *f;
@@ -2720,26 +3053,49 @@ TScreen::TScreen(void)
       logname = strdup(resolved);
     } else openlog(PRG_LOG_NAME, 0, LOG_USER);
 
-    no_x11 = noansi = no_gpm = ign_meta8 = 0;
+    no_x11 = noansi = no_gpm = ign_meta8 = noacsc = 0;
     SM_DOSCYR_DEFAULT;  // mode.(doscyr_ninp=doscyr_nout=1)
-    if((ps = getenv("TVOPT")) != NULL) {
+    if(work.headless) noansi = -1;  // for speed in out
+    else if((ps = getenv("TVOPT")) != NULL) {
       ps = qqstrdup(ps);
-      for(p = strtok(ps, ","); p; p = strtok(NULL, ","))
-        if(!strcasecmp(p, "noX11")) ++no_x11;
-        else if(!strcasecmp(p, "noGPM")) ++no_gpm;
-        else if(!strcasecmp(p, "ign8")) ++ign_meta8;
-        else if(!strcasecmp(p, "alt866")) mode.alt866_font = 1;
-        else if(!strcasecmp(p, "xtrack")) XMOU_SET_TRACK;
-        else if(!strcasecmp(p, "mono")) {
+      for(p = strtok(ps, ","); p; p = strtok(NULL, ",")) {
+        if(!strcasecmp(p, "noX11")) {
+          no_x11 = 1;
+          continue;
+        }
+        if(!strcasecmp(p, "noGPM")) {
+          no_gpm = 1;
+          continue;
+        }
+        if(!strcasecmp(p, "ign8")) {
+          ign_meta8 = 1;
+          continue;
+        }
+        if(!strcasecmp(p, "noacsc")) goto do_noacsc;
+        if(!strcasecmp(p, "alt866")) {
+          mode.alt866_font = 1;
+do_noacsc:
+          noacsc = 1;
+          continue;
+        }
+        if(!strcasecmp(p, "xtrack")) {
+          XMOU_SET_TRACK;
+          continue;
+        }
+        if(!strcasecmp(p, "mono")) {
           if(noansi > 0) goto ansi_incompat;
           noansi = -1;
-        } else if(!strcasecmp(p, "ansi")) {
+          continue;
+        }
+        if(!strcasecmp(p, "ansi")) {
           if(noansi < 0) {
 ansi_incompat:
             error("TVOPT: 'ansi' and 'mono' are incompatible");
           }
           noansi = 1;
-        } else if(!strncasecmp(p, "cyrcvt=", sizeof("cyrcvt=")-1)) {
+          continue;
+        }
+        if(!strncasecmp(p, "cyrcvt=", sizeof("cyrcvt=")-1)) {
           if(SM_DOSCYR_CHANGED) error("Duplicate cyrcvt in TVOPT");
           p += sizeof("cyrcvt=")-1;
           if(!strcasecmp(p, "windows")) {
@@ -2755,18 +3111,32 @@ cyrcvt_kwin:
 cyrcvt_all:
             SM_DOSCYR_ENABLE;  // mode.(doscyr_ninp=doscyr_nout)=0
           } else error("Possible values for cyrcvt are: linux, windows, kwin");
-        } else error("Possible fields in TVOPT are:\n\t"
-                  "noX11, noGPM, ign8, ansi, mono, alt866, xtrack, cyrcvt=");
+          continue;
+        }
+        error("Possible fields in TVOPT are:\n\t"
+              "noX11, noGPM, ign8, noacsc, ansi, mono, alt866, xtrack, cyrcvt=");
+      }
       free(ps);
     }
 
 //---
-    ++pfd_count;  // 1
-    pfd_data[0].fd = STDIN_FILENO;
-    pfd_data[0].events = pfd_data[1].events = POLLIN;
+    init_functor_objects();
+    pollList = new std::vector<struct pollfd>; 
+    
+    struct pollfd pfd_data;
+    pfd_data.fd = STDIN_FILENO;
+    pfd_data.events = POLLIN;
+    pollList->push_back(pfd_data);
+    pfd_data.fd = -1;
+    pfd_data.events = 0;
+    pollList->push_back(pfd_data);
+    pfd_data.fd = functor_pipes[0];
+    pfd_data.events = POLLIN;
+    pollList->push_back(pfd_data);
+     
     con_mou.tioc = 2;
 #ifdef __LINUX__
-    {
+    if(!work.headless) {
       int tmp = 7;  // get mouse reporting (check tty==con :)
       if(ioctl(STDIN_FILENO, TIOCLINUX, &tmp) != -1) work.pc_console = 1;
     }
@@ -2791,13 +3161,18 @@ free_gpm:
 //---
     curs_moveto = _moveto_vt; // preinit (standard)
 
+    if(work.headless) goto nottype;
     p = getenv("TERM");
-    if(p && !*p) p = NULL;  // paranoidally speed
+    if(p && !*p) {  // paranoidally speed
+nottype:
+      p = NULL;
+    }
 
     no_gpm = 0; // used as std_term_type
     if(work.pc_console) goto set_term_linux;
 
 //X11-console (speed - no check X11 if tty is console :)
+#ifdef X11_PRESENT
     if((hX11 = dlopen("libX11.so", RTLD_NOW)) != NULL) {
       tXOpenDisplay pXOpenDisplay;
 
@@ -2818,6 +3193,13 @@ drop_x11:
       }
 ignore_x11:
       dlclose(hX11);
+    }
+#endif
+
+    if(work.headless) {
+      no_gpm = 1;   // std_term_type = linux
+      --fd_ssave;   // -1
+      goto headless_without_ncurses;
     }
 
     if(!p) error("Undefined TERM environment variable");
@@ -2861,7 +3243,7 @@ set_term_linux:
     } else if(p && !memcmp(p, "xterm", sizeof("xterm")-1)) --fd_ssave; // -1
 
 //    if(no_gpm) goto without_libcurses;
-    if((hCurses = dlopen("libcurses.so", RTLD_NOW)) != NULL) {
+    if((hCurses = dlopen(LIBCURSES, RTLD_NOW)) != NULL) {
       typedef int (*Tgetent)(char *, const char *);
       typedef int (*Tgetflag)(char *);
 
@@ -2878,23 +3260,34 @@ set_term_linux:
       if(dlerror()) {
 drop_curses:
         if(!no_gpm)
-          error("Invalid libcurses.so\n"
+          error("Invalid %s\n"
                 "\tAs a temporary workaround you could\n"
                 "\tset the TERM environment variable to:\n"
-                "\txterm, linux or scoansi.");
+                "\txterm, linux or scoansi.", LIBCURSES);
         dlclose(hCurses);
         hCurses = NULL;
         goto without_ncurses;
       }
-      if(Pgetent(NULL, p) != 1 || !termout_init(noansi, no_gpm))
-        error("Dumb terminal %s is not supported\n", p);
+      if(Pgetent(NULL, p) != 1) goto dumb;
+      switch(termout_init(noansi, no_gpm)) {
+        case 0:
+dumb:
+          error("Dumb terminal %s is not supported\n", p);
+        case 1:
+          if(!noacsc) load_pseudographics();
+          //passthru
+        default:  // simulate std mode
+          break;
+      }
 
-      if(Pgetflag("km")) mode.meta_8bit = 1;
+      if(Pgetflag((char*)"km")) mode.meta_8bit = 1;
+
     } else { // no loaded (attempt to work without ncurses)
-      if(!no_gpm) error("Can not load libcurses.so\n\t"
-                        "Without libcurses can work only with xterm/linux");
+      if(!no_gpm) error("Can not load %s\n\t"
+             "Without libcurses can work only with xterm/linux", LIBCURSES);
 without_ncurses:
       if(!(no_gpm & 1)) mode.meta_8bit = 1; // xterm[-xxx]
+headless_without_ncurses:
       termout_internal(no_gpm);
       no_gpm = -no_gpm;
     }
@@ -2908,23 +3301,31 @@ without_ncurses:
 
 // singleton initialization
 
+    /* default screen size */
+    screenWidth = 80;
+    screenHeight = 25;
     /* acquire screen size */
-    {
+    if(!work.headless) {
       winsize win;
-      if(ioctl(0, TIOCGWINSZ, &win) != -1) {
+      if(ioctl(0, TIOCGWINSZ, &win) == -1)
+        LOG("unable to detect the screen size, using 80x25");
+      else {
         if(win.ws_col <= 0 || win.ws_row <= 0) abort();
         screenWidth = range(win.ws_col, 4, maxViewWidth);
         screenHeight = range(win.ws_row, 4, 80);
 #ifdef WINCHG_DEBUG
         LOG("screen size is %dx%d", screenWidth, screenHeight);
 #endif
-      } else {
-        LOG("unable to detect the screen size, using 80x25");
-        screenWidth = 80;
-        screenHeight = 25;
       }
     }
     screenBuffer = new ushort[screenWidth * screenHeight];
+
+    if(work.headless && isatty(STDIN_FILENO)) {
+      if(!tcgetattr(STDIN_FILENO, &old_tios)) {
+        copy_tios();
+        if(!tcsetattr(0, TCSAFLUSH, &my_tios)) work2.hdl_restor = 1;
+      }
+    }
 
     /* catch useful signals */
     set_all_signals(sigHandler);

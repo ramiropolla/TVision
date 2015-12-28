@@ -75,7 +75,7 @@ struct MouseEventType
      * meDoubleClick 0x02  Set if a button was double clicked
      * </pre>
      */
-    ulong eventFlags;           // Replacement for doubleClick.
+    uint32 eventFlags;           // Replacement for doubleClick.
     bool doubleClick(void) const { return (eventFlags & meDoubleClick) != 0; }
     /**
      * This bitmap variable stores the status of the control keys when the
@@ -100,7 +100,7 @@ struct MouseEventType
      * and libraries (gpm, ncurses). Usually only a subset of these flags are
      * detected. See file `system.cc' for details.
      */
-    ulong controlKeyState;
+    uint32 controlKeyState;
     /**
      * This variable reports the status of the mouse buttons when the event
      * happened. It's a combination of the following constants:
@@ -270,7 +270,7 @@ struct KeyDownEvent
      * and libraries (gpm, ncurses). Usually only a subset of these flags are
      * detected. See file `system.cc' for details.
      */
-    ulong controlKeyState;
+    uint32 controlKeyState;
 };
 
 struct MessageEvent
@@ -279,7 +279,7 @@ struct MessageEvent
     union
         {
         void *infoPtr;
-        long infoLong;
+        int32 infoLong;
         ushort infoWord;
         short infoInt;
         uchar infoByte;
@@ -317,10 +317,16 @@ public:
     static void suspend();
     static void resume();
 
+    static int addFdListener( int fd, void (*cb)(void *cookie, int fd, int flags), void *cookie );
+    static int setFdListenerFlags( int fd, void *cookie, int flags);
+    static int removeFdListener( int fd, void *cookie );
+    static const int FLAGS_READ = 1;
+    static const int FLAGS_WRITE = 2;
+
     friend class TView;
     friend void genRefs();
 #ifndef __UNIX__
-    friend unsigned long getTicks(void);
+    friend uint32 getTicks(void);
 #endif
     friend class TProgram;
     static ushort doubleDelay;

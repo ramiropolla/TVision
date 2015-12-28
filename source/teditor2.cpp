@@ -44,20 +44,20 @@ int countLines( void *buf, size_t count )
 // These Routines are taken from Rogue Wave Tools++
 size_t scan( const void *block, size_t size, const char *str )
 {
-  const long   q        = 33554393L;
-  const long   q32      = q<<5;
+  const int32   q        = 33554393L;
+  const int32   q32      = q<<5;
 
   size_t testLength      = size;
   size_t patternLength   = strlen(str);
   if( testLength < patternLength || patternLength == 0 ) return UINT_MAX;
 
-  long  patternHash     = 0;
-  long  testHash        = 0;
+  int32  patternHash     = 0;
+  int32  testHash        = 0;
 
   register const char*  testP= (const char*)block;
   register const char*  patP = str;
-  register long   x = 1;
-  size_t          i = patternLength-1;
+  register int32 x = 1;
+  size_t         i = patternLength-1;
   while(i--) x =  (x<<5)%q;
 
   for (i=0; i<patternLength; i++) {
@@ -85,20 +85,20 @@ size_t scan( const void *block, size_t size, const char *str )
 
 size_t iScan( const void *block, size_t size, const char *str )
 {
-  const long   q        = 33554393L;
-  const long   q32      = q<<5;
+  const int32   q        = 33554393L;
+  const int32   q32      = q<<5;
 
   size_t testLength      = size;
   size_t patternLength   = strlen(str);
   if( testLength < patternLength || patternLength == 0 ) return UINT_MAX;
 
-  long  patternHash     = 0;
-  long  testHash        = 0;
+  int32  patternHash     = 0;
+  int32  testHash        = 0;
 
-  register const char*  testP= (const char*)block;
-  register const char*  patP = str;
-  register long   x = 1;
-  size_t          i = patternLength-1;
+  register const char* testP= (const char*)block;
+  register const char* patP = str;
+  register int32 x = 1;
+  size_t         i = patternLength-1;
   while(i--) x =  (x<<5)%q;
 
   for (i=0; i<patternLength; i++) {
@@ -159,7 +159,7 @@ Boolean TEditor::insertBuffer( char *p,
             if( selLen > insCount )
                 delLen = selLen - insCount;
 
-    size_t newSize = long(bufLen + delCount - selLen + delLen) + length;
+    size_t newSize = int32(bufLen + delCount - selLen + delLen) + length;
 
     if( newSize > (bufLen + delCount) )
         if( newSize > (UINT_MAX-0x1F) || setBufSize(newSize) == False )

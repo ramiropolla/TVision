@@ -10,7 +10,8 @@
 /*
         Check target platform
 */
-#if !defined(__MSDOS__) && !defined(__OS2__) && !defined(__NT__) && !defined(__LINUX__) && !defined(__MAC__)
+#if !defined(__MSDOS__) && !defined(__OS2__) && !defined(__NT__) && \
+    !defined(__LINUX__) && !defined(__MAC__) && !defined(__BSD__)
 #error "Unknown target platform!"
 #endif
 
@@ -18,7 +19,7 @@
 #pragma warning(disable:4250)  // call virtual fuinction via dominance
 #endif
 
-#if defined(__MAC__) || defined(__LINUX__)
+#if defined(__MAC__) || defined(__LINUX__) || defined(__BSD__)
 #define __UNIX__
 #endif
 
@@ -39,8 +40,6 @@
 #include <unistd.h>
 void LOG(const char *format, ...)  // debug
     __attribute__((__format__(__printf__, 1, 2)));
-#else
-typedef unsigned long ulong;
 #endif
 
 #include <ctype.h>

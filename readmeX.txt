@@ -1,42 +1,59 @@
-$Id: //depot/ida/tvision/readmeX.txt#3 $
+$Id: //depot/ida/tvision/readmeX.txt#6 $
 
 TVision ported to Linux, and Darwin/Mac OS X X Windows
 -----------------------------------------------------------
 
 This package is a module which offers support for running IDA natively under
-X11.  To use this version of the library you must build the library, install
-it as 'libtvision.so' in your IDA application directory, and finally, install
-a "VGA" font on your X server.
+X11 and advanced IDA plugins such as "collabREate".  To use this version of
+the library you must build the library, install it as 'libtvision.so' in
+your IDA application directory, and finally, install a "VGA" font on your X
+server.  Each of these steps is outlined in detail below.
 
 Release notes
 -----------------------------------------------------------
 
-Release JSC-1.6 notes:
+Release JSC-2.1 notes:
 
-* Implemented system-level cut-and-paste between the TVision clipboard
-  and the X server clipboard.  Cutting and pasting between TVision
-  applications and other X applications now works.
-
-* Implemented a new screen update algorithm that tries to reduce unecessary
-  drawing commands sent to the X server.  Should improve performance over
-  slow links.
-
-* Incorporated changes in DataRescue's TVision M release.  Compatability
-  with IDA 5.1 and Mac OS X.
+* Incorporated changes in HexRays's TVision 2009a release (IDA 5.5).
 
 Installation
 -----------------------------------------------------------
 
-To build this library you must first obtain and unpack the IDA SDK.  Once
-you have unpacked the SDK, run 'make IDA=<your-sdk-dir>/' in
-the source/ directory, where <your-sdk-dir> is a relative or absolute path
-to the unpacked SDK.  Don't forget the trailing slash.
+To build this library you must first obtain the requisite development packages
+for your operating system (see "Build Problems: Package dependencies", below)
+Then you must obtain and unpack the IDA SDK.  Once you have unpacked the SDK,
+you must use the 'idamake.pl' script that comes with the IDA distribution to
+build this library.
+
+There are two versions of this library: the "Terminal" version, and the "X11"
+version.  The terminal version is targeted for any ANSI-style terminal
+and the X11 version is targeted for X Window servers.  Each version must be
+built separately.
+
+Terminal version
+----------------
+To build the terminal version of the library:
+
+  Linux   : idamake.pl IDA=<your-sdk-dir>/ __LINUX__=1
+  Darwin  : idamake.pl IDA=<your-sdk-dir>/ __MAC__=1
+
+X11 version
+-----------
+To build the X11 version of the library:
+
+  Linux   : idamake.pl IDA=<your-sdk-dir>/ __X11__=1 __LINUX__=1
+  Darwin  : idamake.pl IDA=<your-sdk-dir>/ __X11__=1 __MAC__=1
+
+These commands should be run in the "source" directory of this package.
+(Replace <your-sdk-dir> with a relative or absolute path to the unpacked SDK).
+Don't forget the trailing slash in the directory that you supply in the IDA
+variable.
 
 When the build process has completed, you will find two shared libraries in
 in the 'bin' directory of your IDA SDK distribution, depending on your
-operating system:
+operating system and which library you built:
 
-        xterm mode library     Native X11 library
+        Terminal mode library  Native X11 library
 
 Linux   libtvision.so          libtvisionx.so
 Darwin  libtvision.dylib       libtvisionx.dylib
@@ -47,22 +64,48 @@ rename it to
 Linux   libtvision.so
 Darwin  libtvision.dylib
 
+Don't forget to save the original library just in case you have problems!
+
 To switch back to using xterm mode just do the same with the built xterm mode
 library.
 
-TVision requires an IBM-compatible PC X server font (commonly called a 'VGA'
-font around the web).  There are several freely available high-quality fonts
-which fit this description.  I recommend 'vga.pcf' and 'sabvga.pcf', both of
-which can currently be found at
-
-http://www.shelluser.net/~giles/bashprompt/xfonts/
+Fonts
+-----
+The X11 version of the library requires an IBM-compatible PC X server font
+(commonly called a 'VGA' font around the web).  There are several freely
+available high-quality fonts which fit this description.  I recommend
+'vga.pcf' and 'sabvga.pcf', both of which are packaged with this library
+in the 'fonts' sub-directory.
 
 Please consult your X server's documentation for information on font
 installation.  In general, these fonts should be installed in the
-/usr/X11R6/lib/X11/fonts/ directory, run 'mkfontdir' in the directory in which
-you install the fonts, then run 'xset fp rehash'.  Finally, if you are running
-a font server, (such as "xfs") force it to restart.  If all else fails, just
-run 'mkfontdir' and restart your X server.
+/usr/X11R6/lib/X11/fonts/ or /usr/share/fonts/X11/ directories.  Run
+'mkfontdir'in the directory in which you install the fonts, then run
+'xset fp rehash'.  Finally, if you are running a font server, (such as "xfs")
+force it to restart. If all else fails, just run 'mkfontdir' and restart
+your X server.
+
+Build problems: Package dependencies
+-----------------------------------------------------------
+The default installations to many UNIX-like operating systems these days do
+not include the requisite development tools and headers to build this library
+from source code form.  You may have to download extra "development" packages
+to get these tools and headers.
+
+Mac OS X/Darwin
+--------
+You must download and install the "BSD subsystem", the "XCode" development
+package and the "X11" base and development packages.
+
+Linux
+-----
+I have found that you have to download and install the following packages
+in a typical linux system:
+
+* g++
+* libncurses-dev
+* libgpm-dev
+* libx11-dev
 
 Running
 -----------------------------------------------------------

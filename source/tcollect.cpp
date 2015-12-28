@@ -185,7 +185,9 @@ ccIndex TNSCollection::indexOf(void *item)
             return i;
 
     error(1,0);
+#ifndef _MSC_VER
     return 0;
+#endif
 }
 
 ccIndex TNSCollection::insert( void *item )

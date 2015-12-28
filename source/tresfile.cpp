@@ -25,7 +25,7 @@
 #define Uses_TResourceCollection
 #include <tv.h>
 
-const long rStreamMagic = 0x52504246uL; // 'FBPR'
+const int32 rStreamMagic = 0x52504246uL; // 'FBPR'
 
 struct Count_type
 {
@@ -36,7 +36,7 @@ struct Count_type
 struct Info_type
 {
     ushort infoType;
-    long infoSize;
+    int32 infoSize;
 };
 
 struct THeader
@@ -56,7 +56,7 @@ TResourceFile::TResourceFile( fpstream *aStream ) : TObject()
     int handle;
     int found;
     int repeat;
-    long streamSize;
+    int32 streamSize;
 
     stream = aStream;
     basePos = stream->tellp();
@@ -92,14 +92,14 @@ TResourceFile::TResourceFile( fpstream *aStream ) : TObject()
 
     if (found)
     {
-        stream->seekg(basePos + sizeof(long) * 2, ios::beg);
+        stream->seekg(basePos + sizeof(int32) * 2, ios::beg);
         *stream >> indexPos;
         stream->seekg(basePos + indexPos, ios::beg);
         *stream >> index;
     }
     else
     {
-        indexPos =  sizeof(long) * 3;
+        indexPos =  sizeof(int32) * 3;
         index = new TResourceCollection(0, 8);
     }
     delete header;
@@ -130,13 +130,13 @@ void TResourceFile::remove( const char *key )
 
 void TResourceFile::flush()
 {
-    long lenRez;
+    int32 lenRez;
 
     if (modified == True)
     {
         stream->seekg(basePos + indexPos, ios::beg);
         *stream << index;
-        lenRez =  stream->tellp() - basePos -  sizeof(long) * 2;
+        lenRez =  stream->tellp() - basePos -  sizeof(int32) * 2;
         stream->seekg(basePos, ios::beg);
         *stream << rStreamMagic;
         *stream << lenRez;

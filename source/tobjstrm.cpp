@@ -371,13 +371,13 @@ ipstream& _Cdecl operator >> ( ipstream& ps, unsigned int &i )
     return ps;
 }
 
-ipstream& _Cdecl operator >> ( ipstream& ps, signed long &l )
+ipstream& _Cdecl operator >> ( ipstream& ps, int32 &l )
 {
     ps.readBytes( &l, sizeof(l) );
     return ps;
 }
 
-ipstream& _Cdecl operator >> ( ipstream& ps, unsigned long &l )
+ipstream& _Cdecl operator >> ( ipstream& ps, uint32 &l )
 {
     ps.readBytes( &l, sizeof(l) );
     return ps;
@@ -590,13 +590,13 @@ opstream& _Cdecl operator << ( opstream& ps, unsigned int i )
     ps.writeWord( i );
     return ps;
 }
-opstream& _Cdecl operator << ( opstream& ps, signed long l )
+opstream& _Cdecl operator << ( opstream& ps, int32 l )
 {
     ps.writeBytes( &l, sizeof(l) );
     return ps;
 }
 
-opstream& _Cdecl operator << ( opstream& ps, unsigned long l )
+opstream& _Cdecl operator << ( opstream& ps, uint32 l )
 {
     ps.writeBytes( &l, sizeof(l) );
     return ps;

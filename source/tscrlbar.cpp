@@ -82,7 +82,7 @@ int TScrollBar::getPos()
     if( r == 0 )
         return 1;
     else
-        return (((long(value - minVal) * (getSize() - 3)) + (r >> 1)) / r) + 1;
+        return (((int32(value - minVal) * (getSize() - 3)) + (r >> 1)) / r) + 1;
 }
 
 int TScrollBar::getSize()
@@ -177,7 +177,7 @@ void TScrollBar::handleEvent( TEvent& event )
                 if( Tracking && s > 2 )
                     {
                     s -= 2;
-                    setValue(((long(p - 1) * (maxVal - minVal) + (s >> 1)) / s) + minVal);
+                    setValue(((int32(p - 1) * (maxVal - minVal) + (s >> 1)) / s) + minVal);
                     }
                 }
             clearEvent(event);

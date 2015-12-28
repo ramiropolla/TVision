@@ -906,4 +906,17 @@ protected:
     void getEvent(TEvent& event) { TProgram::getEvent(event); };
 };
 
+// send a request to main thread from any other thread.
+// the request will be passed to the function registered by register_request_collector()
+// it will happen as soon as the main thread will check for the next
+// keyboard or mouse event.
+
+void send_request_to_main_thread(void *req);
+
+
+// register a callback for interthread requests
+
+void register_request_collector(void (*func)(void *));
+
+
 #endif

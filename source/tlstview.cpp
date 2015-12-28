@@ -426,14 +426,14 @@ void TListViewer::write( opstream& os )
 {
     TView::write( os );
     os << hScrollBar << vScrollBar << numCols
-       << long(topItem) << long(focused) << long(range);
+       << int32(topItem) << int32(focused) << int32(range);
 }
 
 void *TListViewer::read( ipstream& is )
 {
     TView::read( is );
     is >> hScrollBar >> vScrollBar >> numCols;
-    long z;
+    int32 z;
     is >> z; topItem = z;
     is >> z; focused = z;
     is >> z; range   = z;

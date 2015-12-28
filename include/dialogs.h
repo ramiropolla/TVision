@@ -20,7 +20,8 @@ const int
     bfNormal    = 0x00,
     bfDefault   = 0x01,
     bfLeftJust  = 0x02,
-    bfBroadcast = 0x04;
+    bfBroadcast = 0x04,
+    bfNoShadows = 0x08;
 
 #endif  // __BUTTON_TYPE
 
@@ -427,7 +428,7 @@ public:
      *
 * @ref bfBroadcast 0x04  Sends a broadcast message when pressed
      *
-* @ref bfGrabFocus 0x08  The button grabs the focus when pressed
+* @ref bfNoShadows 0x08  The button has no shadows
      * </pre>
      *
      * It is the responsibility of the programmer to ensure that there is only
@@ -711,7 +712,7 @@ class TStringCollection;
  * Cluster controls are often associated with @ref TLabel objects, letting you
  * select the control by selecting on the adjacent explanatory label.
  * Clusters are used to toggle bit values in the @ref value data member, which
- * is of type unsigned long.
+ * is of type uint32.
  *
  * The two standard descendants of TCluster use different algorithms when
  * changing value: @ref TCheckBoxes simply toggles a bit, while
@@ -750,8 +751,8 @@ public:
      * data members, in order to work with @ref getData() and @ref setData().
      *
      * It returns `sizeof(short)' for compatibility with earlier TV, even if
-     * @ref value data member is now an unsigned long; @ref TMultiCheckBoxes
-     * returns sizeof(long).
+     * @ref value data member is now an uint32; @ref TMultiCheckBoxes
+     * returns sizeof(int32).
      */
     virtual size_t dataSize();
     /**
@@ -813,14 +814,20 @@ public:
      * @see TRadioButtons::mark
      */
     virtual Boolean mark( int item );
+    virtual void setItem( int item, Boolean on );
     virtual void press( int item );
     virtual void movedTo( int item );
     virtual void setData( void *rec );
     virtual void setState( ushort aState, Boolean enable );
 
+    bool isEnabledItem( int item ) { return (enabled & (1<<item)) != 0; }
+    void setEnabledItem( int item, Boolean enable );
+
+
 protected:
 
     ushort value;
+    ushort enabled;     // bitmask of enabled bits
     int sel;
     TStringCollection *strings;
 
@@ -890,6 +897,7 @@ public:
 
     virtual void draw();
     virtual Boolean mark( int item );
+    virtual void setItem( int item, Boolean on );
     virtual void movedTo( int item );
     virtual void press( int item );
     virtual void setData( void *rec );
@@ -959,6 +967,7 @@ public:
     virtual void draw();
 
     virtual Boolean mark( int item );
+    virtual void setItem( int item, Boolean on );
     virtual void press( int item );
 
 private:
@@ -1089,6 +1098,7 @@ public:
     virtual void draw();
     virtual TPalette& getPalette() const;
     virtual void getText( char *buf, size_t bufsize );
+    virtual void setText( const char *buf );
 
 protected:
 

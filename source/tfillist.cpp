@@ -114,7 +114,7 @@ void TFileList::readDirectory( const char *dir, const char *wildCard )
 }
 
 #if !defined(__FAT__) || defined(_MSC_VER)
-static long time2searchrec(time_t ftime)
+static int32 time2searchrec(time_t ftime)
 {
   dos_ftime t;
   struct tm *broken = localtime(&ftime);
@@ -129,7 +129,7 @@ static long time2searchrec(time_t ftime)
    */
   t.ft_month = broken->tm_mon + 1;
   t.ft_year = broken->tm_year - 80;
-  return *(long *)&t;
+  return *(int32 *)&t;
 }
 #endif
 
@@ -194,9 +194,9 @@ void TFileList::readDirectory( const char *aWildCard )
 #if defined(_MSC_VER)
         p->time = time2searchrec((time_t)s.ff_ftime);
 #else
-        p->time = s.ff_ftime + (long(s.ff_fdate) << 16);
+        p->time = s.ff_ftime + (int32(s.ff_fdate) << 16);
 #endif
-        p->size = (long)s.ff_fsize;
+        p->size = (int32)s.ff_fsize;
         qstrncpy(p->name, s.ff_name, sizeof(p->name));
         fileList->insert( p );
       }
@@ -208,8 +208,8 @@ void TFileList::readDirectory( const char *aWildCard )
   fnmerge( path, drive, dir, "*", ".*" );
 
   int  upattr = FA_DIREC;
-  long uptime = 0x210000uL;
-  long upsize = 0;
+  int32 uptime = 0x210000uL;
+  int32 upsize = 0;
 
   res = findfirst( path, &s, FA_DIREC );
   while( p != 0 && res == 0 )
@@ -222,9 +222,9 @@ void TFileList::readDirectory( const char *aWildCard )
 #if defined(_MSC_VER)
         uptime = time2searchrec((time_t)s.ff_ftime);
 #else
-        uptime = s.ff_ftime + (long(s.ff_fdate) << 16);
+        uptime = s.ff_ftime + (int32(s.ff_fdate) << 16);
 #endif
-        upsize = (long)s.ff_fsize;
+        upsize = (int32)s.ff_fsize;
       }
       else if ( s.ff_name[0] != '.' || s.ff_name[1] != '\0' )
       {
@@ -235,9 +235,9 @@ void TFileList::readDirectory( const char *aWildCard )
 #if defined(_MSC_VER)
           p->time = time2searchrec((time_t)s.ff_ftime);
 #else
-          p->time = s.ff_ftime + (long(s.ff_fdate) << 16);
+          p->time = s.ff_ftime + (int32(s.ff_fdate) << 16);
 #endif
-          p->size = (long)s.ff_fsize;
+          p->size = (int32)s.ff_fsize;
           qstrncpy(p->name, s.ff_name, sizeof(p->name));
           fileList->insert( p );
         }

@@ -40,7 +40,7 @@ char hotKey( const char *s )
         return 0;
 }
 
-#define cpInputLine "\x13\x13\x14\x15"
+#define cpInputLine "\x13\x13\x14\x15\x21"
 
 TInputLine::TInputLine( const TRect& bounds, int aMaxLen ) :
     TView(bounds),
@@ -83,7 +83,12 @@ void TInputLine::draw()
     int l, r;
     TDrawBuffer b;
 
+    uchar cdis = getColor(5);
+    uchar carr = getColor(4);
+    uchar cfill = getColor(3);
     uchar color = uchar((state & sfFocused) ? getColor( 2 ) : getColor( 1 ));
+    if ( state & sfDisabled )
+      carr = cfill = color = cdis;
 
     b.moveChar( 0, ' ', color, ushort(size.x) );
     char buf[MAXSTR];
@@ -91,17 +96,17 @@ void TInputLine::draw()
     b.moveStr( 1, buf, color );
 
     if( canScroll(1) )
-        b.moveChar( ushort(size.x-1), rightArrow, getColor(4), 1 );
+        b.moveChar( ushort(size.x-1), rightArrow, carr, 1 );
     if( (state & sfSelected) != 0 )
         {
         if( canScroll(-1) )
-            b.moveChar( 0, leftArrow, getColor(4), 1 );
+            b.moveChar( 0, leftArrow, carr, 1 );
         l = selStart - firstPos;
         r = selEnd - firstPos;
         l = qmax( 0, l );
         r = qmin( size.x - 2, r );
         if (l <  r)
-            b.moveChar( ushort(l+1), 0, getColor(3), ushort(r - l) );
+            b.moveChar( ushort(l+1), 0, cfill, ushort(r - l) );
         }
     writeLine( 0, 0, ushort(size.x), ushort(size.y), b );
     setCursor( ushort(curPos-firstPos+1), 0);
@@ -233,10 +238,11 @@ char *TInputLine::clip_get(size_t &clipsz)
 void  TInputLine::handleEvent( TEvent& event )
 {
     /* Home, Left Arrow, Right Arrow, End, Ctrl-Left Arrow, Ctrl-Right Arrow */
-    static char padKeys[] = {0x47,0x4b,0x4d,0x4f,0x73,0x74, 0};
+    static const char padKeys[] = {0x47,0x4b,0x4d,0x4f,0x73,0x74, 0};
     TView::handleEvent(event);
 
     int delta, i;
+    bool changed = false;
     if( (state & sfSelected) != 0 )
         switch( event.what )
             {
@@ -321,6 +327,7 @@ void  TInputLine::handleEvent( TEvent& event )
                           curPos--;
                           if( firstPos > 0 )
                             firstPos--;
+                          changed = true;  
                         }
                         break;
                     case kbDel:
@@ -331,6 +338,7 @@ void  TInputLine::handleEvent( TEvent& event )
                                 selEnd = curPos + 1;
                                 }
                         deleteSelect();
+                        changed = true;
                         break;
                     case kbIns:
                         setState(sfCursorIns, Boolean(!(state & sfCursorIns)));
@@ -355,6 +363,7 @@ void  TInputLine::handleEvent( TEvent& event )
                         memcpy(data+curPos, pcl, clipsz);
                         free(pcl);
                         }
+                        changed = true;
                         break;
                     case kbCtrlIns:
                     case kbShiftDel:
@@ -365,6 +374,7 @@ void  TInputLine::handleEvent( TEvent& event )
                               return; // do not remove selection
                             }
                         deleteSelect();
+                        changed = true;
                         break;
                     default:
                         if( event.keyDown.charScan.charCode >= ' ' )
@@ -382,11 +392,16 @@ void  TInputLine::handleEvent( TEvent& event )
                                     memmove( data+curPos+1, data+curPos, strlen(data+curPos)+1 );
                                     data[curPos++] = event.keyDown.charScan.charCode;
                                     }
+                            changed = true;
                             }
                         else if( event.keyDown.charScan.charCode == CONTROL_Y)
                             {
-                            *data = EOS;
                             curPos = 0;
+                            if ( *data )
+                                {
+                                *data = EOS;
+                                changed = true;
+                                }
                             }
                             else
 			    {
@@ -414,6 +429,11 @@ void  TInputLine::handleEvent( TEvent& event )
                         firstPos = i;
                     drawView();
                     clearEvent( event );
+                    if ( changed )
+                    {
+                        if ( onchange != NULL )
+                          onchange->changed(this);
+                    }
                     break;
             }
 }
@@ -450,6 +470,8 @@ void TInputLine::setState( ushort aState, Boolean enable )
         ( aState == sfActive && (state & sfSelected) != 0 )
       )
         selectAll( enable );
+    if( aState == sfDisabled )
+      drawView();
 }
 
 #ifndef NO_TV_STREAMS

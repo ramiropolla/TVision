@@ -144,7 +144,7 @@ public:
     void operator += ( const TCommandSet& );
     void operator -= ( const TCommandSet& );
 
-    Boolean TCommandSet::isEmpty();
+    Boolean isEmpty();
 
     TCommandSet& operator &= ( const TCommandSet& );
     TCommandSet& operator |= ( const TCommandSet& );
@@ -236,6 +236,12 @@ struct write_args
     ushort offset;
 };
 
+struct onchange_t
+{
+  virtual void changed(TView *obj,...) = 0;
+  virtual ~onchange_t(void) {}
+};
+
 class TRect;
 class TEvent;
 class TGroup;
@@ -275,6 +281,11 @@ public:
     virtual ushort getHelpCtx();
 
     virtual Boolean valid( ushort command );
+
+    // set a callback object to be called when the view is modified by the user.
+    // the object will be deleted by the view's destructor.
+    // this function deletes any existing callback object.
+    void set_onchange(onchange_t *cb);
 
     void hide();
     void show();
@@ -358,6 +369,7 @@ public:
     static Boolean commandSetChanged;
     static TCommandSet curCommandSet;
     TGroup *owner;
+    onchange_t *onchange;
 
     static Boolean showMarkers;
     static uchar errorAttr;
@@ -373,7 +385,7 @@ private:
                    TPoint maxSize,
                    uchar mode
                  );
-    void change( uchar mode, TPoint delta, TPoint& p, TPoint& s, ulong ctrlState );
+    void change( uchar mode, TPoint delta, TPoint& p, TPoint& s, uint32 ctrlState );
     void writeViewRec1( short x1, short x2, TView* p, int shadowCounter );
     void writeViewRec2( short x1, short x2, TView* p, int shadowCounter );
     void writeView( short x1, short x2, short y, const void* buf );

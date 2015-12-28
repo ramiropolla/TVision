@@ -31,6 +31,7 @@ Boolean TRadioButtons::mark( int item )
 void TRadioButtons::press( int item )
 {
     value = (ushort)item;
+    TCluster::press(item);
 }
 
 void TRadioButtons::movedTo( int item )
@@ -42,6 +43,12 @@ void TRadioButtons::setData( void * rec )
 {
     TCluster::setData(rec);
     sel = value;
+}
+
+void TRadioButtons::setItem( int item, Boolean on )
+{
+    if ( on )
+        press(item);
 }
 
 #ifndef NO_TV_STREAMS

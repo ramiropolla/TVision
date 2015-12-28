@@ -31,6 +31,16 @@ Boolean TCheckBoxes::mark(int item)
 void TCheckBoxes::press(int item)
 {
     value = ushort(value^(1 << item));
+    TCluster::press(item);
+}
+
+void TCheckBoxes::setItem( int item, Boolean on )
+{
+    ushort mask = 1 << item;
+    if ( on )
+      value |= mask;
+    else
+      value &= ~mask;
 }
 
 #ifndef NO_TV_STREAMS

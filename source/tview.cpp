@@ -52,7 +52,8 @@ TCommandSet TView::curCommandSet = initCommands();
 
 TView::TView( const TRect& bounds) :
     next( 0 ), options( 0 ), state( sfVisible ), growMode( 0 ),
-    dragMode( dmLimitLoY ), helpCtx( hcNoContext ), owner( 0 )
+    dragMode( dmLimitLoY ), helpCtx( hcNoContext ), owner( 0 ),
+    onchange( 0 )
 {
     eventMask = evMouseDown | evKeyDown | evCommand;
     setBounds( bounds);
@@ -61,6 +62,13 @@ TView::TView( const TRect& bounds) :
 
 TView::~TView()
 {
+  delete onchange;
+}
+
+void TView::set_onchange(onchange_t *cb)
+{
+  delete onchange;
+  onchange = cb;
 }
 
 void TView::blockCursor()
@@ -176,7 +184,7 @@ void TView::moveGrow( TPoint p,
     locate(r);
 }
 
-void TView::change( uchar mode, TPoint delta, TPoint& p, TPoint& s, ulong ctrlState )
+void TView::change( uchar mode, TPoint delta, TPoint& p, TPoint& s, uint32 ctrlState )
 {
     if( (mode & dmDragMove) != 0 && (ctrlState & kbShift) == 0 )
         p += delta;
@@ -649,10 +657,18 @@ void TView::setData( void * )
 
 void TView::setState( ushort aState, Boolean enable )
 {
-    if( enable == True )
+    if( enable )
+    {
+        if ( (state & aState) != 0 )
+          return;
         state |= aState;
+    }
     else
+    {
+        if ( (state & aState) == 0 )
+          return;
         state &= ~aState;
+    }
 
     if( owner == 0 )
         return;
@@ -667,7 +683,7 @@ void TView::setState( ushort aState, Boolean enable )
             else
                 drawHide( 0 );
             if( (options & ofSelectable) != 0 )
-                owner->resetCurrent();
+               owner->resetCurrent();
             break;
         case  sfCursorVis:
         case  sfCursorIns:

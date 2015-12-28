@@ -1,4 +1,4 @@
-/* $Id: //depot/ida/tvision/source/linuxx.cpp#5 $ */
+/* $Id: //depot/ida/tvision/source/linuxx.cpp#11 $ */
 /*
  * system.cc
  *
@@ -61,12 +61,15 @@
 #include <sys/time.h>
 #include <termios.h>
 #include <errno.h>
+#include <poll.h>
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xresource.h>
 #include <X11/keysym.h>
+
+#include "fdlisten.h"
 
 #define ADVANCED_CLIPBOARD 1
 
@@ -86,12 +89,21 @@ typedef struct {
 
 static void writeRow(int dst, ushort *src, int len, bool isExpose);
 static Bool findSelectionNotifyEvent(Display *d, XEvent *e, XPointer arg);
+static void handle_exec_request(void);
+static void init_functor_objects(void);
+static void term_functor_objects(void);
 
 static Display *x_disp;
 static Window x_win;
 static GC *characterGC;
 static GC cursorGC;
 static int x_disp_fd;
+std::vector<struct pollfd> *pollList;
+
+// syncronization objects for exec_request_t
+static int functor_pipes[2];
+static void (*request_collector)(void *);
+
 //
 // The last X Event received.
 //
@@ -198,7 +210,7 @@ static Region expose_region;
 #define	DEFAULT_GEOMETRY_HEIGHT	25
 
 /* Background text colors */
-static char *bgColor[] = {
+static const char *bgColor[] = {
   DEFAULT_BGCOLOR_0,
   DEFAULT_BGCOLOR_1,
   DEFAULT_BGCOLOR_2,
@@ -218,7 +230,7 @@ static char *bgColor[] = {
 };
 
 /* Foreground text colors */
-static char *fgColor[] = {
+static const char *fgColor[] = {
   DEFAULT_FGCOLOR_0,
   DEFAULT_FGCOLOR_1,
   DEFAULT_FGCOLOR_2,
@@ -237,15 +249,15 @@ static char *fgColor[] = {
   DEFAULT_FGCOLOR_15
 };
 
-static char *fontName = DEFAULT_FONT,
-            *geometry = NULL;
+static const char *fontName = DEFAULT_FONT,
+                  *geometry = NULL;
 
 static int fontHeight, fontAscent, fontDescent, fontWidth;
 
 struct XResource {
   const char *name;
   const char *cls;
-  char **value;
+  const char **value;
 };
 typedef struct XResource XResource;
 
@@ -371,7 +383,7 @@ inline int range(int test, int min, int max)
  * KEYBOARD FUNCTIONS
  */
 
-ulong getTicks(void)
+uint32 getTicks(void)
 {
   return currentTime * 18 / 1000;
 }
@@ -613,6 +625,7 @@ static const KeyboardXlat ctrlXlatSeed[] = {
   { 'x',      kbCtrlX },
   { 'y',      kbCtrlY },
   { 'z',      kbCtrlZ },
+  { '~',      kbCtrlTilda },
 //
   { kbIns,    kbCtrlIns     },
   { kbDel,    kbCtrlDel     },
@@ -694,6 +707,7 @@ static const KeyboardXlat altXlatSeed[] = {
   { ',',      kbAltComma       },
   { '.',      kbAltDot         },
   { '/',      kbAltSlash       },
+  { '~',      kbAltTilda       },
 //
   { kbF1,     kbAltF1    },
   { kbF2,     kbAltF2    },
@@ -893,6 +907,7 @@ get_key_mouse_event(TEvent &event)
 {
   int num_events;
   int button;
+  bool xFdReady = false;
 
   event.what = evNothing;
 
@@ -902,15 +917,57 @@ get_key_mouse_event(TEvent &event)
    *
    * if event_delay is zero, then do not suspend
    */
-  if ( XEventsQueued(x_disp, QueuedAfterFlush) == 0 &&
-       TProgram::event_delay != 0)
+  while ( XEventsQueued(x_disp, QueuedAfterFlush) == 0 &&
+          TProgram::event_delay != 0 && !xFdReady)
   {
-    fd_set fdSetRead;
-
-    FD_ZERO(&fdSetRead);
-    FD_SET(x_disp_fd, &fdSetRead);
-
-    select(x_disp_fd + 1, &fdSetRead, NULL, NULL, NULL);
+    struct pollfd *polls = &pollList->at(0);
+    int pollCount = pollList->size();
+     
+    int res = poll(polls, pollCount, -1);
+    if (res == -1) {
+      if (errno == EINTR)
+        continue;
+      else
+        error("poll: %s\n", strerror(errno));
+    }
+    
+    //
+    // Mark that we're going to use the polling registry so that
+    // others don't mess with it.
+    //
+    issuingFdCallbacks++;
+    
+    //
+    // Examine all returned descriptors for results.
+    //
+    for (size_t i = 0; i < pollCount; i++) {
+      //
+      // Did this descriptor return an event?
+      //
+      if (polls[i].revents != 0) {
+        //
+        // Descriptor returned an event.  Are there listeners for it?
+        // (There ought to be if it was in the pollList!)
+        //
+        // Was it the X display file descriptor?
+        //
+        if (polls[i].fd == x_disp_fd)
+          // The X display file descriptor is ready.  Note it.
+          xFdReady = true;
+        else if (polls[i].fd == functor_pipes[0])
+          // The async notification queue has a message
+          handle_exec_request();
+        
+        notifyFdListeners(polls[i].fd, polls[i].revents);
+      }
+    }
+    
+    //
+    // We're done examining the callback list.
+    // Process any queued requests.
+    //
+    if (--issuingFdCallbacks == 0)
+        processQueuedFdActions();
   }
 
   num_events = XEventsQueued(x_disp, QueuedAfterFlush);
@@ -1160,7 +1217,7 @@ get_key_mouse_event(TEvent &event)
       currentScreenBuffer = new ushort[totalSize];
       currentUpdateBlocks = new UpdateBlock[TScreen::screenWidth];
       currentChunkBuf = new char[TScreen::screenWidth];
-      memset(currentScreenBuffer, sizeof(short) * totalSize, 0);
+      memset(currentScreenBuffer, 0, sizeof(short) * totalSize);
       LOG("screen resized to %dx%d", TScreen::screenWidth,
         TScreen::screenHeight);
       TScreen::drawCursor(0); /* hide the cursor */
@@ -1248,6 +1305,7 @@ static void freeResources()
 	KeyboardXlatHash_free(shiftKeyTable);
 	KeyboardXlatHash_free(ctrlKeyTable);
 	KeyboardXlatHash_free(altKeyTable);
+  term_functor_objects();
 
   LOG("terminated");
 }
@@ -1475,13 +1533,13 @@ TScreen::TScreen()
 	 */
 	XFontStruct *theFont = XLoadQueryFont(x_disp, fontName);
 	if (theFont == NULL)
-		error("Can't load font '%s'.", fontName);
+		error("Can't load font '%s'.\n", fontName);
 
 	/*
 	 * Log a warning if the font isn't fixed-width.
 	 */
 	if (theFont->min_bounds.width != theFont->max_bounds.width)
-		warning("Font '%s' is not fixed-width.", fontName);
+		warning("Font '%s' is not fixed-width.\n", fontName);
 
 	fontAscent = theFont->ascent;
 	fontDescent = theFont->descent;
@@ -1544,8 +1602,8 @@ TScreen::TScreen()
 	if ((clh = XAllocClassHint()) == NULL)
 		error("alloc");
 
-	clh->res_name = APP_NAME;
-	clh->res_class = APP_CLASS;
+	clh->res_name = (char *)APP_NAME;
+	clh->res_class = (char *)APP_CLASS;
 
 	/*
 	 * Setup hints to the window manager.
@@ -1560,11 +1618,11 @@ TScreen::TScreen()
 	wmh->initial_state = NormalState;
 
 	XTextProperty WName, IName;
-	char *app_name = APP_NAME;
+	const char *app_name = APP_NAME;
 
-	if (XStringListToTextProperty(&app_name, 1, &WName) == 0)
+	if (XStringListToTextProperty((char **)&app_name, 1, &WName) == 0)
 		error("Error creating text property");
-	if (XStringListToTextProperty(&app_name, 1, &IName) == 0)
+	if (XStringListToTextProperty((char **)&app_name, 1, &IName) == 0)
 		error("Error creating text property");
 
 	/*
@@ -1628,6 +1686,31 @@ TScreen::TScreen()
 	/* setup file descriptors */
 
 	x_disp_fd = ConnectionNumber(x_disp);
+
+  // Setup a pipe for syncronization objects
+  init_functor_objects();
+  
+  //
+  // Set up a polling entry for the X display file descriptor.
+  //
+  struct pollfd pfd;
+  pfd.fd = x_disp_fd;
+  pfd.events = POLLIN;
+  pollList = new std::vector<struct pollfd>; 
+  pollList->push_back(pfd);
+  
+  //
+  // Set up a polling entry for the syncronization pipe
+  //
+  pfd.fd = functor_pipes[0];
+  pfd.events = POLLIN;
+  pollList->push_back(pfd);
+
+  //
+  // Mark that we're not currently in the middle of a file descriptor
+  // callback issuing loop.
+  //
+  issuingFdCallbacks = 0;
 
   curX = curY = 0;
   cursor_displayed = true;
@@ -2447,5 +2530,42 @@ findSelectionNotifyEvent(Display *d, XEvent *e, XPointer arg)
   return False;
 }
 #endif // ADVANCED_CLIPBOARD
+
+//---------------------------------------------------------------------------
+static void init_functor_objects(void)
+{
+  if ( pipe(functor_pipes) != 0 )
+    error("tvlinux: failed to create syncronization objects\n");
+}
+
+//---------------------------------------------------------------------------
+static void term_functor_objects(void)
+{
+  close(functor_pipes[0]);
+  close(functor_pipes[1]);
+}
+
+//---------------------------------------------------------------------------
+void send_request_to_main_thread(void *req)
+{
+  if ( write(functor_pipes[1], &req, sizeof(req)) != sizeof(req) )
+    abort();
+}
+
+//---------------------------------------------------------------------------
+// Store asynchronious event in the queue
+static void handle_exec_request(void)
+{
+  void *req;
+  if ( read(functor_pipes[0], &req, sizeof(req)) == sizeof(req) )
+    request_collector(req);
+}
+
+//---------------------------------------------------------------------------
+// Register a callback for asycnhronious exec requests
+void register_request_collector(void (*func)(void *))
+{
+  request_collector = func;
+}
 
 #endif // __UNIX__

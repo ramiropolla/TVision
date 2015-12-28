@@ -42,7 +42,7 @@ Boolean TEventQueue::mouseIntFlag = False;
 #include <bios.h>
 
 ushort *TEventQueue::Ticks = (ushort *)MK_FP( 0x000, 0x046c );
-unsigned long getTicks(void) { return *(TEventQueue::Ticks); }
+uint32 getTicks(void) { return *(TEventQueue::Ticks); }
 
 #else   // __MSDOS__
 
@@ -542,6 +542,7 @@ static win32_trans_t alt_trans[] = {
   { kbAltKAdd       , VK_ADD    },
   { kbAltKEnter     , VK_RETURN },
   { kbAltK5         , VK_CLEAR  },
+  { kbAltTilda      , VK_OEM_3  },
   { 0               , 0         }
 };
 
@@ -579,6 +580,7 @@ static win32_trans_t ctrl_trans[] = {
   { kbCtrlK5        , VK_CLEAR   },
   { kbCtrlKIns      , VK_INSERT  },
   { kbCtrlKDel      , VK_DELETE  },
+  { kbCtrlTilda     , VK_OEM_3   },
   { 0               , 0          }
 };
 

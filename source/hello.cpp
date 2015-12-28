@@ -196,5 +196,10 @@ int main(int argc,char *argv[])
   return 0;
 }
 
-void ActionKey(const char *, char *buf, size_t size ) { buf[0] = '\0'; }
+idaman void ActionKey(const char *, char *buf, size_t size ) { buf[0] = '\0'; }
 idaman char *ida_export ivalue1(int) { return ""; }
+idaman void ida_export verror(const char *message, va_list va)
+{
+  vfprintf(stderr, message, va);
+  exit(-1);
+}

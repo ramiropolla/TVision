@@ -43,7 +43,7 @@ void TDrawBuffer::moveBuf( ushort indent, const void *source,
   ssize_t count = _count;
   size_t offset = indent;
   if ( offset+count > qnumber(data) )
-    count = qnumber(data)-offset;
+    count = ssize_t(qnumber(data)-offset);
 
   if (attr)
   {
@@ -80,7 +80,7 @@ void TDrawBuffer::moveChar( ushort indent, char c, ushort attr, ushort _count )
   ssize_t count = _count;
   size_t offset = indent;
   if ( offset+count > qnumber(data) )
-    count = qnumber(data)-offset;
+    count = ssize_t(qnumber(data)-offset);
 
   if (attr && c)
   {

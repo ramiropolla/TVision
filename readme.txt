@@ -2,7 +2,7 @@
 TVision by Borland ported to OS/2, MS Windows, DOS32, Linux, Mac OS X
 ---------------------------------------------------------------------
 
-                                                Version Level M
+                                          Version 2009a (for IDA v5.5)
 
 This port is partially based on the port of TVision to FreeBSD made by
 Sergio Sigala.
@@ -29,5 +29,5 @@ If you find any problems with the code, feel free to report them or even
 better, to fix the found bugs :)
 
 With best regards,
-Ilfak Guilfanov at Datarescue <ig@datarescue.be>
+IDA Pro Team <support@hex-rays.com>
 

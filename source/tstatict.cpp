@@ -36,6 +36,12 @@ TStaticText::~TStaticText()
     delete[] (char*)text;
 }
 
+void TStaticText::setText( const char *buf )
+{
+    delete[] (char *)text;
+    text = newStr(buf);
+}
+
 void TStaticText::draw()
 {
     uchar color;

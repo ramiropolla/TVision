@@ -21,7 +21,7 @@
 
 void fexpand( char *path, size_t pathsize );
 
-unsigned long getTicks();
+uint32 getTicks();
 // returns a value that can be used as a substitute for the DOS Ticker at [0040:006C]
 unsigned char getShiftState();
 // returns a value that can be used as a substitute for the shift state at [0040:0017]

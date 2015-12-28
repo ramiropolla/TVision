@@ -32,15 +32,21 @@
 #define Uses_ipstream
 #include <tv.h>
 
-TChDirDialog::TChDirDialog( ushort opts, ushort histId ) :
-    TDialog( TRect( 16, 2, 64, 20 ), changeDirTitle ),
-    TWindowInit( TChDirDialog::initFrame )
+TChDirDialog::TChDirDialog(
+        ushort opts,
+        ushort histId,
+        const char *title,
+        const char *_inidir) :
+    TDialog( TRect( 16, 2, 64, 20 ),
+             (opts & cdCancelButton) != 0 ? "Select directory" : changeDirTitle ),
+    TWindowInit( TChDirDialog::initFrame ),
+    inidir(_inidir)
 {
     options |= ofCentered;
 
     dirInput = new TInputLine( TRect( 3, 3, 30, 4 ), 68 );
     insert( dirInput );
-    insert( new TLabel( TRect( 2, 2, 17, 3 ), dirNameText, dirInput ));
+    insert( new TLabel( TRect( 2, 2, 62, 3 ), title ? title : dirNameText, dirInput ));
     insert( new THistory( TRect( 30, 3, 33, 4 ), dirInput, histId ) );
 
     TScrollBar *sb = new TScrollBar( TRect( 32, 6, 33, 16 ) );
@@ -51,10 +57,14 @@ TChDirDialog::TChDirDialog( ushort opts, ushort histId ) :
 
     okButton = new TButton( TRect( 35, 6, 45, 8 ), okText, cmOK, bfDefault );
     insert( okButton );
+
     chDirButton = new TButton( TRect( 35, 9, 45, 11 ), chdirText, cmChangeDir, bfNormal );
     insert( chDirButton );
     insert( new TButton( TRect( 35, 12, 45, 14 ), revertText, cmRevert, bfNormal ) );
-    if( (opts & cdHelpButton) != 0 )
+
+    if( (opts & cdCancelButton) != 0 )
+        insert( new TButton( TRect( 35, 15, 45, 17 ), "Cancel", cmCancel, bfNormal ) );
+    else if( (opts & cdHelpButton) != 0 )
         insert( new TButton( TRect( 35, 15, 45, 17 ), helpText, cmHelp, bfNormal ) );
     if( (opts & cdNoLoadDir) == 0 )
         setUpDialog();
@@ -63,7 +73,12 @@ TChDirDialog::TChDirDialog( ushort opts, ushort histId ) :
 
 size_t TChDirDialog::dataSize()
 {
-    return 0;
+    return dirInput->dataSize();
+}
+
+void TChDirDialog::getDirName(char *buf, size_t bufsize)
+{
+  return dirInput->getData(buf, bufsize);
 }
 
 void TChDirDialog::shutDown()
@@ -75,8 +90,9 @@ void TChDirDialog::shutDown()
     TDialog::shutDown();
 }
 
-void TChDirDialog::getData( void *, size_t )
+void TChDirDialog::getData( void *buf, size_t size )
 {
+    dirInput->getData(buf, size);
 }
 
 void TChDirDialog::handleEvent( TEvent& event )
@@ -90,7 +106,10 @@ void TChDirDialog::handleEvent( TEvent& event )
             switch( event.message.command )
                 {
                 case cmRevert:
-                    getCurDir( curDir, sizeof(curDir) );
+                    if ( inidir == NULL || inidir[0] == '\0' )
+                      getCurDir(curDir, sizeof(curDir));
+                    else
+                      qstrncpy(curDir, inidir, sizeof(curDir));
                     break;
                 case cmChangeDir:
                     {
@@ -126,8 +145,10 @@ void TChDirDialog::handleEvent( TEvent& event )
         }
 }
 
-void TChDirDialog::setData( void * )
+void TChDirDialog::setData( void *data )
 {
+    inidir = (const char *)data;
+    setUpDialog();
 }
 
 void TChDirDialog::setUpDialog()
@@ -135,7 +156,10 @@ void TChDirDialog::setUpDialog()
     if( dirList != 0 )
         {
         char curDir[MAXPATH];
-        getCurDir( curDir, sizeof(curDir) );
+        if ( inidir == NULL || inidir[0] == '\0' )
+          getCurDir( curDir, sizeof(curDir) );
+        else
+          qstrncpy(curDir, inidir, sizeof(curDir));
         dirList->newDirectory( curDir );
         if( dirInput != 0 )
             {

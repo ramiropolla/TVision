@@ -41,8 +41,8 @@ struct dos_ftime
 struct TSearchRec
 {
     uchar attr;
-    long time;
-    long size;
+    int32 time;
+    int32 size;
     char name[MAXFILE+MAXEXT-1];
 };
 
@@ -691,7 +691,8 @@ inline TDirCollection *TDirListBox::list()
 const int
     cdNormal     = 0x0000, // Option to use dialog immediately
     cdNoLoadDir  = 0x0001, // Option to init the dialog to store on a stream
-    cdHelpButton = 0x0002; // Put a help button in the dialog
+    cdHelpButton = 0x0002, // Put a help button in the dialog
+    cdCancelButton = 0x0004; // Replace Help button with Cancel button
 
 class TEvent;
 class TInputLine;
@@ -705,13 +706,14 @@ public:
 
     friend class TDirListBox;
 
-    TChDirDialog( ushort aOptions, ushort histId );
+    TChDirDialog( ushort aOptions, ushort histId, const char *title=NULL, const char *_inidir=NULL);
     virtual size_t dataSize();
     virtual void getData( void *rec, size_t recsize );
     virtual void handleEvent( TEvent& );
     virtual void setData( void *rec );
     virtual Boolean valid( ushort );
     virtual void shutDown();
+    void getDirName(char *buf, size_t bufsize);
 
 private:
 
@@ -721,6 +723,7 @@ private:
     TDirListBox *dirList;
     TButton *okButton;
     TButton *chDirButton;
+    const char *inidir;
 
     static const char *changeDirTitle;
     static const char *dirNameText;

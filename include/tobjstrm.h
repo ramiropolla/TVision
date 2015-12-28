@@ -350,8 +350,8 @@ public:
     friend ipstream& _Cdecl operator >> ( ipstream&, unsigned short& );
     friend ipstream& _Cdecl operator >> ( ipstream&, signed int& );
     friend ipstream& _Cdecl operator >> ( ipstream&, unsigned int& );
-    friend ipstream& _Cdecl operator >> ( ipstream&, signed long& );
-    friend ipstream& _Cdecl operator >> ( ipstream&, unsigned long& );
+    friend ipstream& _Cdecl operator >> ( ipstream&, int32& );
+    friend ipstream& _Cdecl operator >> ( ipstream&, uint32& );
     friend ipstream& _Cdecl operator >> ( ipstream&, float& );
     friend ipstream& _Cdecl operator >> ( ipstream&, double& );
     friend ipstream& _Cdecl operator >> ( ipstream&, long double& );
@@ -420,8 +420,8 @@ public:
     friend opstream& _Cdecl operator << ( opstream&, unsigned short );
     friend opstream& _Cdecl operator << ( opstream&, signed int );
     friend opstream& _Cdecl operator << ( opstream&, unsigned int );
-    friend opstream& _Cdecl operator << ( opstream&, signed long );
-    friend opstream& _Cdecl operator << ( opstream&, unsigned long );
+    friend opstream& _Cdecl operator << ( opstream&, int32 );
+    friend opstream& _Cdecl operator << ( opstream&, uint32 );
     friend opstream& _Cdecl operator << ( opstream&, float );
     friend opstream& _Cdecl operator << ( opstream&, double );
     friend opstream& _Cdecl operator << ( opstream&, long double );

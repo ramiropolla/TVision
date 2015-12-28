@@ -65,7 +65,7 @@ void TButton::drawTitle( TDrawBuffer &b,
     else
         {
         l = (s - cstrlen(title) - 1)/2;
-        if( l < 1 )
+        if( l < 1 && (flags & bfNoShadows) == 0)
             l = 1;
         }
     b.moveCStr( ushort(i+l), title, cButton );
@@ -101,46 +101,57 @@ void TButton::drawState(Boolean down)
             else if( amDefault )
                 cButton = getColor(0x0602);
         }
-    cShadow = getColor(8);
-    int s = size.x-1;
-    int T = size.y / 2 - 1;
+    cShadow = cButton;
+    int s = size.x;
+    int T = size.y / 2;
+    int maxy = size.y - 1;
+    if ( (flags & bfNoShadows) == 0 )
+    {
+      s--;
+      T--;
+      maxy--;
+      cShadow = getColor(8);
+    }
 
-    for( int y = 0; y <= size.y-2; y++ )
+    for( int y = 0; y <= maxy; y++ )
+    {
+      b.moveChar(0, ' ', cButton, size.x);
+      b.putAttribute(0, cShadow);
+      if( down )
+      {
+        b.putAttribute(1, cShadow);
+        i = 2;
+      }
+      else
+      {
+        b.putAttribute( ushort(s), cShadow );
+        if( showMarkers == False )
         {
-        b.moveChar( 0, ' ', cButton, ushort(size.x) );
-        b.putAttribute( 0, cShadow );
-        if( down )
-            {
-            b.putAttribute( 1, cShadow );
-            i = 2;
-            }
-        else
-            {
-            b.putAttribute( ushort(s), cShadow );
-            if( showMarkers == False )
-                {
-                if( y == 0 )
-                    b.putChar( ushort(s), shadows[0] );
-                else
-                    b.putChar( ushort(s), shadows[1] );
-                ch = shadows[2];
-                }
-            i =  1;
-            }
-
-        if( y == T && title != 0 )
-            drawTitle( b, s, i, cButton, down );
-
-        if( showMarkers && !down )
-            {
-            b.putChar( 1, markers[0] );
-            b.putChar( ushort(s-1), markers[1] );
-            }
-        writeLine( 0, ushort(y), ushort(size.x), 1, b );
+          if( y == 0 )
+              b.putChar( ushort(s), shadows[0] );
+          else
+              b.putChar( ushort(s), shadows[1] );
+          ch = shadows[2];
         }
-    b.moveChar( 0, ' ', cShadow, 2 );
-    b.moveChar( 2, ch, cShadow, ushort(s-1) );
-    writeLine( 0, ushort(size.y-1), ushort(size.x), 1, b );
+        i =  1;
+      }
+
+      if( y == T && title != 0 )
+          drawTitle(b, s, i, cButton, down);
+
+      if( showMarkers && !down )
+      {
+        b.putChar(1, markers[0]);
+        b.putChar(ushort(s-1), markers[1]);
+      }
+      writeLine( 0, y, size.x, 1, b );
+    }
+    if ( (flags & bfNoShadows) == 0 )
+    {
+      b.moveChar(0, ' ', cShadow, 2);
+      b.moveChar(2, ch, cShadow, s-1);
+      writeLine(0, size.y-1, size.x, 1, b);
+    }
 }
 
 TPalette& TButton::getPalette() const
@@ -155,9 +166,12 @@ void TButton::handleEvent( TEvent& event )
     TRect clickRect;
 
     clickRect = getExtent();
-    clickRect.a.x++;
-    clickRect.b.x--;
-    clickRect.b.y--;
+    if ( (flags & bfNoShadows) == 0 )
+    {
+      clickRect.a.x++;
+      clickRect.b.x--;
+      clickRect.b.y--;
+    }
 
     if( event.what == evMouseDown )
         {
@@ -256,11 +270,14 @@ void TButton::makeDefault( Boolean enable )
 
 void TButton::setState( ushort aState, Boolean enable )
 {
+    if ( ((state & aState) != 0) == (enable != 0) )
+      return;
+      
     TView::setState(aState, enable);
     if( aState & (sfSelected | sfActive) )
     {
         if(!enable)
-        {                           // BUG FIX - EFW - Thu 10/19/95
+        {                          
             state &= ~sfFocused;
             makeDefault(False);
         }

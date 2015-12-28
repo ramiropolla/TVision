@@ -80,8 +80,8 @@ void TTerminal::bufInc( size_t& val )
 Boolean TTerminal::canInsert( size_t amount )
 {
     ssize_t T = (queFront < queBack) ?
-        ( queFront +  amount ) :
-        ( long(queFront) - bufSize + amount);   // cast needed so we get
+        ssize_t( queFront +  amount ) :
+        ssize_t( int32(queFront) - bufSize + amount);   // cast needed so we get
                                                 // signed comparison
     return Boolean( int(queBack) > T );
 }
@@ -91,10 +91,10 @@ void TTerminal::draw()
     ssize_t  i;
     size_t begLine, endLine;
     char s[maxViewWidth+1];
-    ulong bottomLine;
+    uint32 bottomLine;
 
-    bottomLine = ulong(size.y + delta.y);
-    if( limit.y > bottomLine )
+    bottomLine = uint32(size.y + delta.y);
+    if( (uint32)limit.y > bottomLine )
         {
         endLine = prevLines( queFront, limit.y - bottomLine );
         bufDec( endLine );
@@ -120,7 +120,7 @@ void TTerminal::draw()
           memcpy( s, &buffer[begLine], T );
           s[T] = EOS;
         } else {
-          ssize_t T = bufSize - begLine;
+          ssize_t T = ssize_t(bufSize - begLine);
           if ( T > (ssize_t)sizeof(s)-2) {         // bugfix JS 26.11.94
             memcpy( s, &buffer[begLine], sizeof(s)-2 );
             s[sizeof(s)-2] = EOS;
@@ -215,7 +215,7 @@ otstream::otstream( TTerminal *tt)
 otstream& otstream::operator<<(char const *str)
 {
 
-  if ( str != NULL ) tty->do_sputn(str, (ulong)strlen(str));
+  if ( str != NULL ) tty->do_sputn(str, (uint32)strlen(str));
   return(*this);
 }
 

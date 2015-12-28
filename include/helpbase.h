@@ -14,7 +14,7 @@
 #include <stdio.h>              // we use FILE * instead of fpstream.
 #endif  // ifdef NO_TV_STREAMS
 
-const long magicHeader = 0x46484246L; //"FBHF"
+const int32 magicHeader = 0x46484246L; //"FBHF"
 
 #define cHelpColor      "\x37\x3F\x3A\x13\x13\x30\x3E\x1E"
 #define cHelpBlackWhite "\x07\x0F\x07\x70\x70\x07\x0F\x70"
@@ -153,11 +153,11 @@ public:
     THelpIndex( StreamableInit ) {};
     virtual ~THelpIndex();
 
-    long position( int );
-    void add( int, long );
+    int32 position( int );
+    void add( int, int32 );
 
     ushort size;
-    long *index;
+    int32 *index;
 
 private:
 
@@ -222,7 +222,7 @@ public:
     Boolean modified;
 
     THelpIndex *index;
-    long indexPos;
+    int32 indexPos;
 };
 
 extern TCrossRefHandler crossRefHandler;

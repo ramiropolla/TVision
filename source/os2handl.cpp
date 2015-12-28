@@ -113,9 +113,9 @@ void TThreads::suspend() {
   assert(! DosFreeMem(tiled) ); // Better not, dito
 }
 
-unsigned long getTicks() {
+uint32 getTicks() {
 // return a value that can be used as a substitute for the DOS Ticker at [0040:006C]
-  unsigned long m;
+  uint32 m;
   DosQuerySysInfo( 14, 14, &m, sizeof(m));
   return m/52;
 }
@@ -168,7 +168,7 @@ void TThreads::suspend()
 //               ENABLE_PROCESSED_OUTPUT|ENABLE_WRAP_AT_EOL_OUTPUT);
 }
 
-unsigned long getTicks() {
+uint32 getTicks() {
 // return a value that can be used as a substitute for the DOS Ticker at [0040:006C]
 // To change units from ms to clock ticks.
 //   X ms * 1s/1000ms * 18.2ticks/s = X/55 ticks, roughly.
@@ -211,7 +211,7 @@ static int event_type(INPUT_RECORD &ir) {
   if ( ir.EventType == MOUSE_EVENT ) return IO_RAW_EVENT;
   if ( ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown ) {
     //  Skip shifts and caps,num,scroll locks
-    static char ignore[] = { 0x1D,0x2A,0x38,0x36,0x3A,0x45,0x46,0 };
+    static const char ignore[] = { 0x1D,0x2A,0x38,0x36,0x3A,0x45,0x46,0 };
     if ( strchr(ignore,ir.Event.KeyEvent.wVirtualScanCode) != NULL )
       return IO_IGN_EVENT;
     uchar chr = ir.Event.KeyEvent.uChar.AsciiChar;
@@ -238,10 +238,10 @@ static int event_type(INPUT_RECORD &ir) {
     if ( state & (get_alt_pressed_mask()
                  |RIGHT_CTRL_PRESSED
                  |LEFT_CTRL_PRESSED) ) return IO_RAW_EVENT;
-    static char chars[] = "`1234567890-=   ~!@#$%^&*()_+"
-                          "qwertyuiop[]\\  QWERTYUIOP{}|"
-                          "asdfghjkl;'     ASDFGHJKL:\""
-                          "zxcvbnm,./      ZXCVBNM<>?";
+    static const char chars[] = "`1234567890-=   ~!@#$%^&*()_+"
+                                "qwertyuiop[]\\  QWERTYUIOP{}|"
+                                "asdfghjkl;'     ASDFGHJKL:\""
+                                "zxcvbnm,./      ZXCVBNM<>?";
     if ( strchr(chars,chr) != NULL ) return IO_CHR_EVENT;
     return IO_RAW_EVENT;
   }
@@ -524,8 +524,8 @@ int qgetcurdir(int __drive, char *buffer, size_t bufsize)
 
 #ifdef _MSC_VER
 #pragma comment(lib,"user32")
-inline void _dos_getdrive(uint *drive)  {  *drive = _getdrive(); }
-inline void _dos_setdrive(int drive, uint *) { _chdrive(drive); }
+inline void _dos_getdrive(unsigned *drive)  {  *drive = _getdrive(); }
+inline void _dos_setdrive(int drive, unsigned *) { _chdrive(drive); }
 #endif // _MSC_VER
 
 int fnsplit(const char *__path,
@@ -605,7 +605,7 @@ int getdisk(void)
 int qgetcurdir(int __drive, char *buffer, size_t bufsize)
 {
 #define MAXPATHLEN MAXPATH
-  long size=MAXPATHLEN;
+  int32 size=MAXPATHLEN;
   char tmp[MAXPATHLEN+1];
   tmp[0]=DIRCHAR;
   unsigned int old, dummy;

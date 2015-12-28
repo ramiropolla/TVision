@@ -296,7 +296,7 @@ inline int scan( char *p, int offset, char c)
     else
        {
        if ((temp2 - temp1) <= maxViewWidth )
-         return ulong((temp2 - temp1) + 1);
+         return uint32((temp2 - temp1) + 1);
        else
          return maxViewWidth;
        }
@@ -330,7 +330,7 @@ char *THelpTopic::wrapText( char *text, int size,
     }
     qstrncpy(line, text+offset, qmin((size_t)(i+1),lineBufLen));
     // remove the last '\n'
-    ulong len = (ulong)strlen(line);
+    uint32 len = (uint32)strlen(line);
     offset += len;
     if ( len > 0 && line[len-1] == '\n' )
       line[--len] = '\0';
@@ -344,7 +344,7 @@ const char * const THelpIndex::name = "THelpIndex";
 
 void THelpIndex::write( opstream& os )
 {
-    long *indexArrayPtr;
+    int32 *indexArrayPtr;
 
     os << size;
     for (int i = 0; i < size; ++i)
@@ -356,14 +356,14 @@ void THelpIndex::write( opstream& os )
 
 void *THelpIndex::read( ipstream& is )
 {
-    long *indexArrayPtr;
+    int32 *indexArrayPtr;
 
     is >> size;
     if (size == 0)
         index = 0;
     else
         {
-        index =  new long[size];
+        index =  new int32[size];
         for(int i = 0; i < size; ++i)
             {
             indexArrayPtr = index + i;
@@ -387,7 +387,7 @@ TStreamableClass RHelpIndex( THelpIndex::name,
 //Added to file by Uri bechar
 void THelpIndex::write( FILE *fp ){
 
-    long *indexArrayPtr;
+    int32 *indexArrayPtr;
 
     fwrite(&size,sizeof(size),1,fp);
 
@@ -395,7 +395,7 @@ void THelpIndex::write( FILE *fp ){
     for(int i = 0; i < size; ++i)
     {
         indexArrayPtr = index + i;
-        fwrite(indexArrayPtr, sizeof(long),1,fp);
+        fwrite(indexArrayPtr, sizeof(int32),1,fp);
     }
 
 
@@ -403,7 +403,7 @@ void THelpIndex::write( FILE *fp ){
 
 void THelpIndex::read( FILE *fp ){
 
-    long *indexArrayPtr;
+    int32 *indexArrayPtr;
 
     fread(&size,sizeof(size),1,fp);
 
@@ -411,12 +411,12 @@ void THelpIndex::read( FILE *fp ){
         index = 0;
     else
         {
-        index =  new long[size];
+        index =  new int32[size];
 
         for(int i = 0; i < size; ++i)
             {
             indexArrayPtr = index + i;
-            fread(indexArrayPtr, sizeof(long),1,fp);
+            fread(indexArrayPtr, sizeof(int32),1,fp);
             }
         }
 
@@ -436,9 +436,9 @@ THelpIndex::THelpIndex(void): TObject ()
     index = 0;
 }
 
-long THelpIndex::position(int i)
+int32 THelpIndex::position(int i)
 {
-    long *indexArrayPtr;
+    int32 *indexArrayPtr;
 
     if (i < size)
         {
@@ -449,21 +449,21 @@ long THelpIndex::position(int i)
         return -1;
 }
 
-void THelpIndex::add( int i, long val )
+void THelpIndex::add( int i, int32 val )
 {
     int delta = 10;
-    long *p;
+    int32 *p;
     int newSize;
-    long *indexArrayPtr;
+    int32 *indexArrayPtr;
 
     if (i >= size)
         {
         newSize = (i + delta) / delta * delta;
-        p = new long[newSize];
+        p = new int32[newSize];
         if (p != 0)
             {
-            memmove(p, index, size * sizeof(long));
-            memset(p+size, 0xFF, (newSize - size) * sizeof(long));
+            memmove(p, index, size * sizeof(int32));
+            memset(p+size, 0xFF, (newSize - size) * sizeof(int32));
             }
         if (size > 0)
             {
@@ -562,9 +562,9 @@ void THelpTopic::writeCrossRefs( opstream& s )
 
 THelpFile::THelpFile( fpstream&  s )
 {
-    long magic;
+    int32 magic;
     int handle;
-    long size;
+    int32 size;
 
     magic = 0;
     s.seekg(0);
@@ -592,7 +592,7 @@ THelpFile::THelpFile( fpstream&  s )
 
 THelpFile::~THelpFile(void)
 {
-    long magic, size;
+    int32 magic, size;
     int handle;
 
     if (modified == True)
@@ -613,7 +613,7 @@ THelpFile::~THelpFile(void)
 
 THelpTopic *THelpFile::getTopic( int i )
 {
-    long pos;
+    int32 pos;
     THelpTopic *topic;
 
     pos = index->position(i);
@@ -709,7 +709,7 @@ void THelpTopic::writeParagraphs(FILE *fp)
     for(p = paragraphs; p != 0; p = p->next)
         {
         fwrite(&p->size,sizeof(p->size),1,fp);
-        temp = int(p->wrap);
+        temp = ushort(p->wrap);
         fwrite(&temp,sizeof(temp),1,fp);
         fwrite(p->text,p->size,1,fp);
         }
@@ -744,8 +744,8 @@ void THelpTopic::writeCrossRefs(FILE *fp)
 
 THelpFile::THelpFile( FILE *fp )
 {
-    long magic;
-    long size;
+    int32 magic;
+    int32 size;
 
     magic = 0;
     fseek(fp,0,SEEK_END);
@@ -775,7 +775,7 @@ THelpFile::THelpFile( FILE *fp )
 
 THelpFile::~THelpFile(void)
 {
-    long magic, size;
+    int32 magic, size;
 
     if (modified == True)
         {
@@ -811,7 +811,7 @@ void * THelpTopic::read(FILE *fp)
 
 THelpTopic *THelpFile::getTopic( int i )
 {
-    long pos;
+    int32 pos;
     THelpTopic *topic;
 
     pos = index->position(i);
@@ -849,7 +849,7 @@ extern "C" void ActionKey(const char *str, char *buf, size_t bufsize);
 static char *addxrefs( THelpTopic *topic, char *text, size_t textsize ) { /* ig 22.04.93 */
   char *base = text;
   char *tend = text + textsize;
-  int base_size = (ulong)strlen(base) + 1;
+  int base_size = (uint32)strlen(base) + 1;
   while ( (text=strchr(text,'@')) != NULL ) {
     int y;
     text++;
@@ -860,7 +860,7 @@ static char *addxrefs( THelpTopic *topic, char *text, size_t textsize ) { /* ig 
         *end++ = '\0';
         char actionkey[MAXSTR];
         ActionKey(text+1, actionkey, sizeof(actionkey));
-        int resize = ulong(text + strlen(actionkey) - end); // how many bytes must we add to the string ?
+        int resize = uint32(text + strlen(actionkey) - end); // how many bytes must we add to the string ?
         if (resize > 0) // if the buffer needs resizing,
         {
           char *base_old = base;

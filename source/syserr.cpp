@@ -228,7 +228,9 @@ BOOL __stdcall ctrlBreakHandler( DWORD dwCtrlType )
     }
     if ( dwCtrlType == CTRL_CLOSE_EVENT ) {
       exit(0);
+#ifndef _MSC_VER
       return TRUE;
+#endif
     }
     return FALSE; // Don't handle 'LOGOFF' or 'SHUTDOWN' events.
 }

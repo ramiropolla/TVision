@@ -29,6 +29,9 @@ _CFLAGS = -O -I..\include -D__NOROW__ -D__RUS__ -D__IDA__ -DNO_TV_STREAMS
 !ifdef __LINUX__
 __UNIX__=1
 !endif
+!ifdef __BSD__
+__UNIX__=1
+!endif
 !ifdef __MAC__
 __UNIX__=1
 INSTALL_NAME=-install_name @executable_path/libtvision$(DLLSUFF)
@@ -122,29 +125,33 @@ OBJS=   $(F)colorsel$(O) \
         $(F)tvwrite2$(O) \
         $(F)twindow$(O)
 
-OBJS_XTERM= $(OBJS) linux$(O)
-OBJS_XWIN=  $(OBJS) linuxx$(O)
+OBJS_XTERM= $(OBJS) linux$(O) fdlisten$(O)
+OBJS_XWIN=  $(OBJS) linuxx$(O) fdlisten$(O)
 
 !ifdef __UNIX__
+!ifndef __BSD__
 DL=-ldl
-!ifdef __LINUX__
-EXPORTS_DEF=tvision.script
-!else
+!endif
+!ifdef __MAC__
 UNDEFS=-undefined dynamic_lookup
+!else
+EXPORTS_DEF=tvision.script
 !endif
 all: $(R)libtvision$(DLLSUFF) $(R)libtvisionx$(DLLSUFF)
 $(R)libtvision$(DLLSUFF): $(OBJS_XTERM) $(EXPORTS_DEF)
-	$(CCL) $(OUTDLL) $(OUTSW)$@ $(EXPORTS_DEF) $(OBJS_XTERM) -ldl $(UNDEFS) $(INSTALL_NAME)
+	$(CCL) $(OUTDLL) $(OUTSW)$@ $(EXPORTS_DEF) $(OBJS_XTERM) $(DL) $(UNDEFS) $(INSTALL_NAME)
 $(R)libtvisionx$(DLLSUFF): $(OBJS_XWIN) $(EXPORTS_DEF)
-	$(CCL) $(OUTDLL) $(OUTSW)$@ $(EXPORTS_DEF) $(OBJS_XWIN) -ldl $(UNDEFS) $(INSTALL_NAME) -L/usr/X11R6/lib -lX11
+	$(CCL) $(OUTDLL) $(OUTSW)$@ $(EXPORTS_DEF) $(OBJS_XWIN) $(DL) $(UNDEFS) $(INSTALL_NAME) -L/usr/X11R6/lib -lX11
 !else
 all: objdir tv$(T) $(TL)tv$(A)
 !endif
 
 !ifdef __NT__
-hello:	./hello$(B) $(TL)tv$(A)
-!endif
+hello:	.\hello$(B) $(TL)tv$(A)
+.\hello$(B): tv$(T) $(F)hello$(O)
+!else
 ./hello$(B): tv$(T) $(F)hello$(O)
+!endif
 	$(CCL) $(OUTSW)$@ $(F)hello$(O) $(OBJS_XTERM) $(L)pro$(A) $(DL)
 ./hellox$(B): tv$(T) $(F)hello$(O)
 	$(CCL) $(OUTSW)$@ $(F)hello$(O) $(OBJS_XWIN) $(L)pro$(A) $(DL)
@@ -170,6 +177,7 @@ $(F)helpbase$(O):       helpbase.cpp
 $(F)histlist$(O):       histlist.cpp
 $(F)linux$(O):          linux.cpp
 $(F)linuxx$(O):         linuxx.cpp
+$(F)fdlisten$(O):       fdlisten.cpp
 $(F)mapcolor$(O):       mapcolor.cpp
 $(F)menu$(O):           menu.cpp
 $(F)misc$(O):           misc.cpp

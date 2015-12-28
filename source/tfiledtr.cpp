@@ -101,7 +101,7 @@ Boolean TFileEditor::loadFile()
           fseek(fi, 0, SEEK_END);
           long fSize = ftell(fi);
           fseek(fi, 0, SEEK_SET);
-        if( fSize > (long)(UINT_MAX-0x1F) || setBufSize(size_t(fSize)) == False )
+        if( fSize > (int32)(UINT_MAX-0x1F) || setBufSize(size_t(fSize)) == False )
             {
             fclose(fi);
             editorDialog( edOutOfMemory );
@@ -195,8 +195,8 @@ Boolean TFileEditor::saveFile()
         }
     else
         {
-        writeBlock( f, buffer, ulong(curPtr) );
-        writeBlock( f, buffer+curPtr+gapLen, ulong(bufLen-curPtr) );
+        writeBlock( f, buffer, uint32(curPtr) );
+        writeBlock( f, buffer+curPtr+gapLen, uint32(bufLen-curPtr) );
 
         if(ferror(f) || feof(f))
             {

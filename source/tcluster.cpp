@@ -27,11 +27,12 @@
 #define Uses_ipstream
 #include <tv.h>
 
-#define cpCluster "\x10\x11\x12\x12"
+#define cpCluster "\x10\x11\x12\x12\x21"
 
 TCluster::TCluster( const TRect& bounds, TSItem *aStrings ) :
     TView(bounds),
     value( 0 ),
+    enabled( 0xFFFF ),
     sel( 0 )
 {
     options |= ofSelectable | ofFirstClick | ofPreProcess | ofPostProcess;
@@ -102,7 +103,8 @@ void TCluster::drawBox( const char *icon, char marker)
     TDrawBuffer b;
     ushort color;
 
-    ushort cNorm = state & sfDisabled ? getColor( 0x0505 ) : getColor( 0x0301 );
+    ushort cDis = getColor( 0x0505 );
+    ushort cNorm = state & sfDisabled ? cDis : getColor( 0x0301 );
     ushort cSel = getColor( 0x0402 );
     for( int i = 0; i <= size.y; i++ )
         {
@@ -114,7 +116,9 @@ void TCluster::drawBox( const char *icon, char marker)
                 (size_t)(col+cstrlen(getItemText(cur))+5) < maxViewWidth &&
                 col<size.x )
                {
-                if( (cur == sel) && (state & sfSelected) != 0 )
+                if ( !isEnabledItem(cur) )
+                    color = cDis;
+                else if( (cur == sel) && (state & sfSelected) != 0 )
                     color = cSel;
                 else
                     color = cNorm;
@@ -186,10 +190,14 @@ void TCluster::handleEvent( TEvent& event )
         switch (ctrlToArrow(event.keyDown.keyCode))
             {
             case kbUp:
-                if( (state & sfFocused) != 0 )
+                if( (state & sfFocused) != 0 && enabled != 0 )
                     {
-                    if( --sel < 0 )
+MoveUp:
+                    do
+                    {
+                      if( --sel < 0 )
                         sel = strings->getCount()-1;
+                    } while ( !isEnabledItem(sel) );
                     movedTo(sel);
                     drawView();
                     clearEvent(event);
@@ -197,17 +205,21 @@ void TCluster::handleEvent( TEvent& event )
                 break;
 
             case kbDown:
-                if( (state & sfFocused) != 0 )
+                if( (state & sfFocused) != 0 && enabled != 0 )
                     {
-                    if( ++sel >= strings->getCount() )
-                        sel = 0;
+MoveDown:
+                    do
+                    {
+                      if( ++sel >= strings->getCount() )
+                          sel = 0;
+                    } while ( !isEnabledItem(sel) );
                     movedTo(sel);
                     drawView();
                     clearEvent(event);
                     }
                 break;
             case kbRight:
-                if( (state & sfFocused) != 0 )
+                if( (state & sfFocused) != 0 && enabled != 0 )
                     {
                     sel += size.y;
                     if( sel >= strings->getCount() )
@@ -216,13 +228,15 @@ void TCluster::handleEvent( TEvent& event )
                         if( sel >= strings->getCount() )
                             sel =  0;
                         }
+                    if ( !isEnabledItem(sel) )
+                      goto MoveDown;
                     movedTo(sel);
                     drawView();
                     clearEvent(event);
                     }
                 break;
             case kbLeft:
-                if( (state & sfFocused) != 0 )
+                if( (state & sfFocused) != 0 && enabled != 0 )
                     {
                     if( sel > 0 )
                         {
@@ -236,6 +250,8 @@ void TCluster::handleEvent( TEvent& event )
                         }
                     else
                         sel = strings->getCount()-1;
+                    if ( !isEnabledItem(sel) )
+                      goto MoveDown;
                     movedTo(sel);
                     drawView();
                     clearEvent(event);
@@ -245,6 +261,8 @@ void TCluster::handleEvent( TEvent& event )
                 for( int i = 0; i < strings->getCount(); i++ )
                     {
                     char c = hotKey( (char *)(strings->at(i)) );
+                    if( !isEnabledItem(i) )
+                        continue;
                     if( getAltCode(c) == event.keyDown.keyCode ||
                         ( ( owner->phase == phPostProcess ||
                             (state & sfFocused) != 0
@@ -287,6 +305,20 @@ void TCluster::setState( ushort aState, Boolean enable )
         drawView();
 }
 
+void TCluster::setEnabledItem( int item, Boolean enable )
+{
+    ushort mask = 1 << item;
+    if ( enable )
+        enabled |= mask;
+    else
+        enabled &= ~mask;
+    drawView();
+}
+
+void TCluster::setItem( int , Boolean )
+{
+}
+
 Boolean TCluster::mark( int )
 {
     return False;
@@ -296,8 +328,10 @@ void TCluster::movedTo( int )
 {
 }
 
-void TCluster::press( int )
+void TCluster::press( int item )
 {
+  if ( onchange != NULL )
+    onchange->changed(this, item);
 }
 
 int TCluster::column( int item )
@@ -337,7 +371,7 @@ int TCluster::findSel( TPoint p )
         while( p.x >= column( i + size.y ) )
             i += size.y;
         int s = i + p.y;
-        if( s >= strings->getCount() )
+        if( s >= strings->getCount() || !isEnabledItem(s) )
             return -1;
         else
             return s;

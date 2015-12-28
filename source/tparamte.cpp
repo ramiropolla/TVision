@@ -32,7 +32,7 @@ TParamText::TParamText( const TRect& bounds,
 
 size_t TParamText::dataSize()
 {
-    return paramCount * sizeof(long);
+    return paramCount * sizeof(int32);
 }
 
 void TParamText::getText( char *str, size_t strsize )
@@ -42,7 +42,7 @@ void TParamText::getText( char *str, size_t strsize )
     if( text == 0 )
       *str = EOS;
     else
-      qvsnprintf( str, strsize, text, (va_list)paramList );
+      qvsnprintf( str, strsize, text, *(va_list*)&paramList );
   }
 }
 

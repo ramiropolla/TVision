@@ -124,6 +124,8 @@ const ushort
     kbK5             = 0xa700,   
     kbShiftK5        = 0xa800,   
     kbAltK5          = 0xa900,
+    kbCtrlTilda      = 0xaa00,
+    kbAltTilda       = 0xab00,
 
 //  Keyboard state  and shift masks
 

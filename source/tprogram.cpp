@@ -16,6 +16,7 @@
 /*                                                            */
 /*------------------------------------------------------------*/
 
+#define Uses_TApplication
 #define Uses_TKeys
 #define Uses_TProgram
 #define Uses_TEvent
@@ -88,54 +89,85 @@ static void NT_CDECL SystemSuspend(void)
   }
 }
 
-#if 0                   // the following code is good in TVision is in DLL
-#ifdef __NT__
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+//---------------------------------------------------------------------------
+#if defined(__NT__) && defined(__IDA__)
+static qsemaphore_t request_ready;
+static qsemaphore_t request_stored;
+static qmutex_t request_mutex;
+static void *request;
+static void (*request_collector)(void *);
 
-// Terminate TV upon unloading
-
-extern "C" BOOL WINAPI DllEntryPoint(HINSTANCE, DWORD fdwReason, LPVOID)
+static void init_functor_objects(void)
 {
-//  MessageBox(NULL, "DllEntryPoint is called", "Debug", MB_OK);
-  switch ( fdwReason )
-  {
-    case DLL_PROCESS_ATTACH:
-      break;
-    case DLL_PROCESS_DETACH:
-      SystemSuspend();
-      break;
-  }
-  return TRUE;
+  request_mutex = qmutex_create();
+  if ( request_mutex == NULL )
+FAILED: fprintf(stderr, "tv: failed to create syncronization objects\n");
+  request_ready = qsem_create(NULL, 0);
+  if ( request_ready == NULL )
+    goto FAILED;
+  request_stored = qsem_create(NULL, 0);
+  if ( request_stored == NULL )
+    goto FAILED;
 }
 
-#endif // __NT__
-
-#ifdef __WATCOMC__
-
-extern "C" int __dll_terminate(void)
+static void term_functor_objects(void)
 {
-  SystemSuspend();
-  return 1;
+  qmutex_free(request_mutex);
+  qsem_free(request_ready);
+  qsem_free(request_stored);
 }
 
-#endif // __WATCOMC__
+// Post an asynchronous request and wait for its execution
+void send_request_to_main_thread(void *req)
+{
+  // tell the main thread we have a request
+  if ( !qmutex_lock(request_mutex) )
+FAILED: abort();
 
-#endif                          // END OF DLL CODE
+  request = req;
+  if ( !qsem_post(request_ready) )
+    goto FAILED;
+  if ( !qsem_wait(request_stored, -1) )      // wait for it to be stored
+    goto FAILED;
+  if ( !qmutex_unlock(request_mutex) )
+    goto FAILED;
+}
+
+static void store_functor_request(void)
+{
+  void *req = request;
+  if ( !qsem_post(request_stored) )
+    abort();
+  request_collector(req);
+}
+
+// Register a callback for asycnhronious exec requests
+void register_request_collector(void (*func)(void *))
+{
+  request_collector = func;
+}
+
+#else
+inline void init_functor_objects(void) {}
+inline void term_functor_objects(void) {}
+#endif
+//---------------------------------------------------------------------------
 
 TSystemInit::TSystemInit()
 {
   resume();
-  static int is_atexit_set = 0;
+  static bool is_atexit_set = false;
   if ( !is_atexit_set )
   {
     atexit(SystemSuspend);
-    is_atexit_set = 1;
+    is_atexit_set = true;
   }
+  init_functor_objects();
 }
 
 TSystemInit::~TSystemInit()
 {
+  term_functor_objects();
   suspend();
 }
 
@@ -221,6 +253,7 @@ inline Boolean hasMouse( TView *p, void *s )
                      p->mouseInView( ((TEvent *)s)->mouse.where ));
 }
 
+
 void TProgram::getEvent(TEvent& event)
 {
     if( pending.what != evNothing )
@@ -257,24 +290,42 @@ void TProgram::getEvent(TEvent& event)
 #elif defined(__NT__)
         DWORD c;
 #define hCin  TThreads::chandle[cnInput]
-        if (
-               TThreads::ispending()
-            || TThreads::macro_playing
-            || (GetNumberOfConsoleInputEvents(hCin, &c) && c)
-            || (   (c = TEventQueue::lastMouse.buttons != 0 ?
-                        TEventQueue::autoDelay : event_delay) != 0
-                && WaitForSingleObject(hCin, c) == WAIT_OBJECT_0))
-#undef hCin
+        int code = TThreads::ispending()
+                || TThreads::macro_playing
+                || GetNumberOfConsoleInputEvents(hCin, &c) && c;
+        if ( !code )
         {
-          event.getMouseEvent();
-          if ( event.what == evNothing )
-            event.getKeyEvent();
+          HANDLE handles[2];
+          handles[0] = hCin;
+          handles[1] = request_ready;
+          int timeout = TEventQueue::lastMouse.buttons != 0
+                      ? TEventQueue::autoDelay
+                      : event_delay;
+          code = WaitForMultipleObjects(qnumber(handles), handles, false, timeout);
+          if ( code == WAIT_OBJECT_0 )
+            code = 1; // console input
+          else if ( code == WAIT_OBJECT_0+1 )
+            code = 2; // functor piper
+          else
+            code = 0;
         }
-        else
+#undef hCin
+        switch ( code )
         {
-          event.what = evNothing;
-          if ( TEventQueue::lastMouse.buttons != 0 )
+          case 2:               // functor
+            store_functor_request();
+            break;
+          case 1:               // console input
             event.getMouseEvent();
+            if ( event.what == evNothing )
+              event.getKeyEvent();
+            break;
+          case 0:               // nothing
+          default:
+            event.what = evNothing;
+            if ( TEventQueue::lastMouse.buttons != 0 )
+              event.getMouseEvent();
+            break;
         }
 
         extern int changed_nt_console_size;

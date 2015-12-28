@@ -160,7 +160,7 @@ void doCountTileable( TView* p, void * )
 
 int dividerLoc( int lo, int hi, int num, int pos)
 {
-    return int(long(hi-lo)*pos/long(num)+lo);
+    return int(int32(hi-lo)*pos/int32(num)+lo);
 }
 
 TRect calcTileRect( short pos, const TRect &r )
