@@ -1,4 +1,4 @@
-$Id: readmeX.txt,v 1.1 2004/08/18 07:01:43 jeremy Exp $
+$Id: readmeX.txt,v 1.2 2004/08/20 00:05:35 jeremy Exp $
 
 TVision ported to Linux X Windows
 -----------------------------------------------------------
@@ -8,6 +8,15 @@ TVision applications natively under X11.  To use this version of the
 library you must build the 'libtvisionx.so' target, install it
 as 'libtvision.so' with your application, and install a "VGA" font on your
 X server.
+
+Release notes
+-----------------------------------------------------------
+
+Release JSC-1.0 notes:
+
+* Keyboard support, text cursor, and mouse support for the second
+  button have been added.  X queue event flushing has been improved, which
+  makes applications appear more responsive.
 
 Release JSC-0.9 notes:
 
@@ -121,4 +130,4 @@ tvision.text.bgcolor1: blue40
 tvision.text.bgcolor6: #404000
 
 Enjoy!
-Jeremy Cooper <jeremy@baymoo.org>
+Jeremy Cooper <jeremy, at baymoo.org>

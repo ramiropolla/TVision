@@ -230,8 +230,13 @@ inline Boolean TMouse::present()
 #pragma pack(1)
 struct CharScanType
 {
+#ifdef __MACOSX__
+    uchar scanCode;
+    uchar charCode;
+#else
     uchar charCode;
     uchar scanCode;
+#endif
 };
 #pragma pack()
 

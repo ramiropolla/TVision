@@ -38,8 +38,13 @@ protected:
 
 };
 
+#ifdef __MACOSX__
+#define loByte(w)    (((uchar *)&w)[1])
+#define hiByte(w)    (((uchar *)&w)[0])
+#else
 #define loByte(w)    (((uchar *)&w)[0])
 #define hiByte(w)    (((uchar *)&w)[1])
+#endif
 
 inline void TDrawBuffer::putAttribute( ushort indent, ushort attr )
 {

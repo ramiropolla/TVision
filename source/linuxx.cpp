@@ -1,4 +1,4 @@
-/* $Id: linuxx.cpp,v 1.1 2004/08/18 06:51:50 jeremy Exp $ */
+/* $Id: linuxx.cpp,v 1.5 2004/08/20 00:05:14 jeremy Exp $ */
 /*
  * system.cc
  *
@@ -64,18 +64,20 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xresource.h>
+#include <X11/keysym.h>
 
 static Display *x_disp;
 static Window x_win;
 static GC *characterGC;
+static GC cursorGC;
 static int x_disp_fd;
 
 static bool inited = false;
 
 static int lastMods;
 static int current_color;
-static Time last_click_time;
-static int last_click_button;
+static Time last_release_time;
+static int last_release_button;
 static int keyboardModifierState;
 static Region expose_region;
 
@@ -312,24 +314,19 @@ inline int range(int test, int min, int max)
  * KEYBOARD FUNCTIONS
  */
 
-/*
- * Gets information about modifier keys (Alt, Ctrl and Shift).  This can
- * be done only if the program runs on the system console.
- */
-
-uchar getShiftState()
-{
-	return keyboardModifierState;
-}
-
 ulong getTicks(void)
 {
-//  struct timeval tv;
-//  gettimeofday(&tv, NULL);
-//  return (tv.tv_sec*100 + tv.tv_usec / 10000) * 18 / 100;
   return currentTime * 18 / 1000;
 }
 
+uchar getShiftState(void)
+{
+  return keyboardModifierState;
+}
+
+/*
+ * X DRAWING FUNCTIONS
+ */
 static void
 handleXExpose(XEvent *event)
 {
@@ -372,7 +369,25 @@ handleXExpose(XEvent *event)
   }
 }
 
-static int
+static void
+drawTextCursor()
+{
+  XFillRectangle(x_disp, x_win, cursorGC, curX * fontWidth, curY * fontHeight,
+                 fontWidth, fontHeight);
+}
+
+static void
+eraseTextCursor()
+{
+  XFillRectangle(x_disp, x_win, cursorGC, curX * fontWidth, curY * fontHeight,
+                 fontWidth, fontHeight);
+}
+
+/*
+ * X KEYBOARD AND MOUSE TRANSLATION FUNCTIONS
+ */
+
+static inline int
 translateXModifierState(int x_state)
 {
   int state = 0;
@@ -380,12 +395,395 @@ translateXModifierState(int x_state)
   if (x_state & ShiftMask)
     state |= kbLeftShift;
   if (x_state & ControlMask)
-    state |= kbCtrlShift;
+    state |= kbLeftCtrl;
   if (x_state & LockMask)
     state |= kbCapsState;
 
   return state;
 }
+
+/*
+ * Translate an X button number into a TVision button number.
+ */
+static inline int
+translateXButton(int x_button)
+{
+  switch (x_button) {
+  case Button1:
+    return TEventQueue::mouseReverse ? mbRightButton : mbLeftButton;
+  case Button3:
+    return TEventQueue::mouseReverse ? mbLeftButton : mbRightButton;
+  default:
+    return 0;
+  }
+}
+
+
+
+/*
+ * Keyboard translation tables.
+ *
+ * These tables direct the translation of X keyboard events into
+ * their TVision counterparts.  The tables definied here are "seed" tables;
+ * they aren't used directly by the running code, but rather, they are used
+ * as initialization values when creating the faster hash-based lookup table.
+ */
+
+struct KeyboardXlat {
+  int in_code;
+  int out_code;
+};
+typedef struct KeyboardXlat KeyboardXlat;
+
+//
+// Translation table for unmodified key presses.
+//
+static const KeyboardXlat plainXlatSeed[] = {
+  { XK_Escape,          kbEsc       },
+  { XK_BackSpace,       kbBack      },
+  { XK_Tab,             kbTab       },
+  { XK_KP_Enter,        kbEnter     },
+  { XK_Return,          kbEnter     },
+  { XK_F1,              kbF1        },
+  { XK_F2,              kbF2        },
+  { XK_F3,              kbF3        },
+  { XK_F4,              kbF4        },
+  { XK_F5,              kbF5        },
+  { XK_F6,              kbF6        },
+  { XK_F7,              kbF7        },
+  { XK_F8,              kbF8        },
+  { XK_F9,              kbF9        },
+  { XK_F10,             kbF10       },
+  { XK_F11,             kbF11       },
+  { XK_F12,             kbF12       },
+  { XK_Home,            kbHome      },
+  { XK_Up,              kbUp        },
+  { XK_Page_Up,         kbPgUp      },
+  { XK_Prior,           kbPgUp      },
+  { XK_KP_Subtract,     kbGrayMinus },
+  { XK_Left,            kbLeft      },
+  { XK_Right,           kbRight     },
+  { XK_KP_Add,          kbGrayPlus  },
+  { XK_End,             kbEnd       },
+  { XK_Down,            kbDown      },
+  { XK_Page_Down,       kbPgDn      },
+  { XK_Next,            kbPgDn      },
+  { XK_Insert,          kbIns       },
+  { XK_Delete,          kbDel       },
+//
+// These key down events must be ignored because they are not
+// emitted by the IBM PC BIOS.
+// (Their states will be obeyed, however).
+//
+  { XK_Shift_L,         kbNoKey },
+  { XK_Shift_R,         kbNoKey },
+  { XK_Control_L,       kbNoKey },
+  { XK_Control_R,       kbNoKey },
+  { XK_Caps_Lock,       kbNoKey },
+  { XK_Shift_Lock,      kbNoKey },
+  { XK_Meta_L,          kbNoKey },
+  { XK_Alt_L,           kbNoKey },
+  { XK_Alt_R,           kbNoKey },
+  { XK_Super_L,         kbNoKey },
+  { XK_Super_R,         kbNoKey },
+  { XK_Hyper_L,         kbNoKey },
+  { XK_Hyper_R,         kbNoKey }
+};
+
+//
+// Translation table for shift-key modified keypresses.
+//
+static const KeyboardXlat shiftXlatSeed[] = {
+  { kbIns,   kbShiftIns },
+  { kbTab,   kbShiftTab },
+  { kbF1,    kbShiftF1  },
+  { kbF2,    kbShiftF2  },
+  { kbF3,    kbShiftF3  },
+  { kbF4,    kbShiftF4  },
+  { kbF5,    kbShiftF5  },
+  { kbF6,    kbShiftF6  },
+  { kbF7,    kbShiftF7  },
+  { kbF8,    kbShiftF8  },
+  { kbF9,    kbShiftF9  },
+  { kbF10,   kbShiftF10 },
+  { kbF11,   kbShiftF11 },
+  { kbF12,   kbShiftF12 }
+};
+
+//
+// Translation table for control-key modified keypresses.
+//
+static const KeyboardXlat ctrlXlatSeed[] = {
+// XXX - These entries will be incorrect on non-ASCII systems
+  { 'a',      kbCtrlA },
+  { 'b',      kbCtrlB },
+  { 'c',      kbCtrlC },
+  { 'd',      kbCtrlD },
+  { 'e',      kbCtrlE },
+  { 'f',      kbCtrlF },
+  { 'g',      kbCtrlG },
+  { 'h',      kbCtrlH },
+  { 'i',      kbCtrlI },
+  { 'j',      kbCtrlJ },
+  { 'k',      kbCtrlK },
+  { 'l',      kbCtrlL },
+  { 'm',      kbCtrlM },
+  { 'n',      kbCtrlN },
+  { 'o',      kbCtrlO },
+  { 'p',      kbCtrlP },
+  { 'q',      kbCtrlQ },
+  { 'r',      kbCtrlR },
+  { 's',      kbCtrlS },
+  { 't',      kbCtrlT },
+  { 'u',      kbCtrlU },
+  { 'v',      kbCtrlV },
+  { 'w',      kbCtrlW },
+  { 'x',      kbCtrlX },
+  { 'y',      kbCtrlY },
+  { 'z',      kbCtrlZ },
+//
+  { kbIns,    kbCtrlIns     },
+  { kbDel,    kbCtrlDel     },
+  { kbBack,   kbCtrlBack    },
+  { kbEnter,  kbCtrlEnter   },
+  { kbF1,     kbCtrlF1      },
+  { kbF2,     kbCtrlF2      },
+  { kbF3,     kbCtrlF3      },
+  { kbF4,     kbCtrlF4      },
+  { kbF5,     kbCtrlF5      },
+  { kbF6,     kbCtrlF6      },
+  { kbF7,     kbCtrlF7      },
+  { kbF8,     kbCtrlF8      },
+  { kbF9,     kbCtrlF9      },
+  { kbF10,    kbCtrlF10     },
+  { kbF11,    kbCtrlF11     },
+  { kbF12,    kbCtrlF12     },
+  { kbLeft,   kbCtrlLeft    },
+  { kbRight,  kbCtrlRight   },
+  { kbUp,     kbCtrlUp      },
+  { kbDown,   kbCtrlDown    },
+  { kbEnd,    kbCtrlEnd     },
+  { kbHome,   kbCtrlHome    },
+  { kbPgUp,   kbCtrlPgUp    },
+  { kbPgDn,   kbCtrlPgDn    },
+  { kbTab,    kbCtrlTab     },
+};
+
+//
+// Translation table for alt-key modified keypresses
+//
+static const KeyboardXlat altXlatSeed[] = {
+// XXX - These entries will be incorrect on non-ASCII systems
+  { 'a',      kbAltA           },
+  { 'b',      kbAltB           },
+  { 'c',      kbAltC           },
+  { 'd',      kbAltD           },
+  { 'e',      kbAltE           },
+  { 'f',      kbAltF           },
+  { 'g',      kbAltG           },
+  { 'h',      kbAltH           },
+  { 'i',      kbAltI           },
+  { 'j',      kbAltJ           },
+  { 'k',      kbAltK           },
+  { 'l',      kbAltL           },
+  { 'm',      kbAltM           },
+  { 'n',      kbAltN           },
+  { 'o',      kbAltO           },
+  { 'p',      kbAltP           },
+  { 'q',      kbAltQ           },
+  { 'r',      kbAltR           },
+  { 's',      kbAltS           },
+  { 't',      kbAltT           },
+  { 'u',      kbAltU           },
+  { 'v',      kbAltV           },
+  { 'w',      kbAltW           },
+  { 'x',      kbAltX           },
+  { 'y',      kbAltY           },
+  { 'z',      kbAltZ           },
+  { ' ',      kbAltSpace       },
+  { '0',      kbAlt0           },
+  { '1',      kbAlt1           },
+  { '2',      kbAlt2           },
+  { '3',      kbAlt3           },
+  { '4',      kbAlt4           },
+  { '5',      kbAlt5           },
+  { '6',      kbAlt6           },
+  { '7',      kbAlt7           },
+  { '8',      kbAlt8           },
+  { '9',      kbAlt9           },
+  { '-',      kbAltMinus       },
+  { '=',      kbAltEqual       },
+  { '[',      kbAltOpenBraket  },
+  { ']',      kbAltCloseBraket },
+  { ';',      kbAltSemicolon   },
+  { '\'',     kbAltApostrophe  },
+  { '`',      kbAltBackApst    },
+  { '\\',     kbAltBackslash   },
+  { ',',      kbAltComma       },
+  { '.',      kbAltDot         },
+  { '/',      kbAltSlash       },
+//
+  { kbF1,     kbAltF1    },
+  { kbF2,     kbAltF2    },
+  { kbF3,     kbAltF3    },
+  { kbF4,     kbAltF4    },
+  { kbF5,     kbAltF5    },
+  { kbF6,     kbAltF6    },
+  { kbF7,     kbAltF7    },
+  { kbF8,     kbAltF8    },
+  { kbF9,     kbAltF9    },
+  { kbF10,    kbAltF10   },
+  { kbF11,    kbAltF11   },
+  { kbF12,    kbAltF12   },
+  { kbBack,   kbAltBksp  },
+  { kbEnter,  kbAltEnter },
+  { kbEsc,    kbAltEsc   },
+  { kbTab,    kbAltTab   },
+  { kbLeft,   kbAltLeft  },
+  { kbRight,  kbAltRight },
+  { kbUp,     kbAltUp    },
+  { kbDown,   kbAltDown  },
+  { kbDel,    kbAltDel   },
+  { kbEnd,    kbAltEnd   },
+  { kbHome,   kbAltHome  },
+  { kbIns,    kbAltIns   },
+  { kbPgUp,   kbAltPgUp  },
+  { kbPgDn,   kbAltPgDn  }
+};
+
+/*
+ * Keyboard translation lookup table routines.
+ *
+ * These structures and functions implement a simple lookup table
+ * using a hashing scheme.
+ */
+
+struct KeyBucket {
+  int num_entries;
+  KeyboardXlat *entries;
+};
+typedef struct KeyBucket KeyBucket;
+  
+struct KeyboardXlatHash {
+  int num_buckets;
+  int hash_key;
+  KeyBucket *buckets;
+};
+typedef struct KeyboardXlatHash KeyboardXlatHash;
+
+//
+// Create a new hash-based keyboard key lookup table.
+// 
+static KeyboardXlatHash *
+KeyboardXlatHash_new(int buckets, int hash_key)
+{
+  int i;
+  KeyboardXlatHash *h;
+
+  if (buckets <= 0)
+    error("Dumb bucket count.");
+
+  h = (KeyboardXlatHash *) malloc(sizeof(KeyboardXlatHash));
+
+  h->num_buckets = buckets;
+  h->hash_key = hash_key;
+
+  h->buckets = (KeyBucket *) malloc(sizeof(KeyBucket) * h->num_buckets);
+
+  for (i = 0; i < h->num_buckets; i++) {
+    h->buckets[i].num_entries = 0;
+    h->buckets[i].entries = NULL;
+  }
+
+  return h;
+}
+
+//
+// Add an entry to a hash-based keyboard key lookup table.
+//
+static int
+KeyboardXlatHash_add(KeyboardXlatHash *h, int key, int result)
+{
+  int i;
+
+  i = (key * h->hash_key) % h->num_buckets;
+
+  h->buckets[i].num_entries++;
+  h->buckets[i].entries = (KeyboardXlat *) realloc(h->buckets[i].entries,
+    h->buckets[i].num_entries * sizeof(KeyboardXlat));
+
+  h->buckets[i].entries[h->buckets[i].num_entries-1].in_code = key;
+  h->buckets[i].entries[h->buckets[i].num_entries-1].out_code = result;
+}
+
+static void
+KeyboardXlatHash_free(KeyboardXlatHash *h)
+{
+  int i, j;
+
+  for (i = 0; i < h->num_buckets; i++)
+    free(h->buckets[i].entries);
+
+  free(h->buckets);
+  free(h);
+}
+
+static int
+KeyboardXlatHash_lookup(KeyboardXlatHash *h, int in, int *out)
+{
+  int i, j;
+
+  i = (in * h->hash_key) % h->num_buckets;
+
+  for (j = 0; j < h->buckets[i].num_entries; j++) {
+    if (h->buckets[i].entries[j].in_code == in) {
+      *out = h->buckets[i].entries[j].out_code;
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+static KeyboardXlatHash *plainKeyTable;
+static KeyboardXlatHash *shiftKeyTable;
+static KeyboardXlatHash *ctrlKeyTable;
+static KeyboardXlatHash *altKeyTable;
+
+static KeyboardXlatHash *
+createKeyboardXlatHash(int hash_key, int num_buckets, const KeyboardXlat *seed,
+		       int seed_count)
+{
+  KeyboardXlatHash *h;
+  int i;
+
+  h = KeyboardXlatHash_new(hash_key, num_buckets);
+
+  for (i = 0; i < seed_count; i++)
+    KeyboardXlatHash_add(h, seed[i].in_code, seed[i].out_code);
+
+  return h;
+}
+  
+static void
+setupKeyTables()
+{
+  int i;
+
+  plainKeyTable = createKeyboardXlatHash(17, 16, plainXlatSeed,
+    qnumber(plainXlatSeed));
+
+  shiftKeyTable = createKeyboardXlatHash(17, 16, shiftXlatSeed,
+    qnumber(shiftXlatSeed));
+
+  ctrlKeyTable = createKeyboardXlatHash(17, 64, ctrlXlatSeed,
+    qnumber(ctrlXlatSeed));
+
+  altKeyTable = createKeyboardXlatHash(17, 64, altXlatSeed,
+    qnumber(altXlatSeed));
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 /*
  * Reads a key from the keyboard.
@@ -394,6 +792,8 @@ void TScreen::get_key_mouse_event(TEvent &event)
 {
   XEvent xEvent;
   int num_events;
+  int button;
+
 
   event.what = evNothing;
 
@@ -403,7 +803,8 @@ void TScreen::get_key_mouse_event(TEvent &event)
    *
    * if event_delay is zero, then do not suspend
    */
-  if ( XEventsQueued(x_disp, QueuedAlready) == 0 && TProgram::event_delay != 0)
+  if ( XEventsQueued(x_disp, QueuedAfterFlush) == 0 &&
+       TProgram::event_delay != 0)
   {
     fdActualRead = fdSetRead;
     select(FD_SETSIZE, &fdActualRead, NULL, NULL, NULL);
@@ -411,42 +812,82 @@ void TScreen::get_key_mouse_event(TEvent &event)
 
   num_events = XEventsQueued(x_disp, QueuedAfterFlush);
 
+  /*
+   * Read all of the X events in the X queue until we encounter one we
+   * can deliver to the application, or run out of events.
+   */
   for (;num_events > 0; num_events--) {
     XNextEvent(x_disp, &xEvent);
     switch (xEvent.type) {
     case Expose:
+      /*
+       * X Expose event.
+       *
+       * X sends an Expose event whenever part (or all) of a window needs to be
+       * redrawn.
+       */
       handleXExpose(&xEvent);
       break;
     case ButtonPress:
+      /*
+       * X ButtonPress event.
+       *
+       * X sends a ButtonPress event whenever the user presses a button on the
+       * pointing device (mouse).
+       */
+      keyboardModifierState = translateXModifierState(xEvent.xbutton.state);
+
+      button = translateXButton(xEvent.xbutton.button);
+
+      if (button == 0)
+        // Ignore this button, TVision doesn't support it.
+        break;
+
       event.what = evMouseDown;
-      event.mouse.buttons = mbLeftButton;
+      event.mouse.buttons = msev.mouse.buttons | button;
       event.mouse.where.x = xEvent.xbutton.x / fontWidth;
       event.mouse.where.y = xEvent.xbutton.y / fontHeight;
-      if (event.mouse.where == msev.mouse.where && last_click_time != 0 &&
-          (xEvent.xbutton.time - last_click_time) <
+      event.mouse.controlKeyState = keyboardModifierState;
+
+      if (button == last_release_button &&
+          event.mouse.where == msev.mouse.where &&
+          last_release_time != 0 &&
+          (xEvent.xbutton.time - last_release_time) <
           TICKS_TO_MS(TEventQueue::doubleDelay)) {
         event.mouse.eventFlags = meDoubleClick;
-        last_click_time = 0;
+        last_release_time = 0;
       } else {
         event.mouse.eventFlags = 0;
       }
-      keyboardModifierState = translateXModifierState(xEvent.xkey.state);
-      event.mouse.controlKeyState = keyboardModifierState;
+
+      // Save the event parameters away.
       msev = event;
+
       // Start the autoclick timer.
       msAutoTimer.start(DELAY_AUTOCLICK_FIRST);
+
       return;
     case ButtonRelease:
+      keyboardModifierState = translateXModifierState(xEvent.xbutton.state);
+
+      button = translateXButton(xEvent.xbutton.button);
+      if (button == 0)
+        break;
+
       event.what = evMouseUp;
-      event.mouse.buttons = 0;
+      event.mouse.buttons = msev.mouse.buttons & ~button;
       event.mouse.where.x = xEvent.xbutton.x / fontWidth;
       event.mouse.where.y = xEvent.xbutton.y / fontHeight;
       event.mouse.eventFlags = 0;
-      last_click_time = xEvent.xbutton.time;
-      keyboardModifierState = translateXModifierState(xEvent.xkey.state);
       event.mouse.controlKeyState = keyboardModifierState;
+
+      last_release_time = xEvent.xbutton.time;
+      last_release_button = button;
+
       msev = event;
+
       msAutoTimer.stop();
+
       return;
     case MotionNotify:
       int x, y;
@@ -470,14 +911,41 @@ void TScreen::get_key_mouse_event(TEvent &event)
       }
       break;
     case KeyPress:
+      KeySym xcode;
+      int code;
+
       keyboardModifierState = translateXModifierState(xEvent.xkey.state);
-#if 0
-      xEvent.xkey.state
+
+       XLookupString(&xEvent.xkey, NULL, 0, &xcode, NULL);
+      if (xcode == NoSymbol)
+        break;
+
+      if (KeyboardXlatHash_lookup(plainKeyTable, xcode, &code) == 0) {
+        //
+        // Most key symbols in X are direct ASCII equivalents.  Since we didn't
+        // find a plain mapping from X to TVision, just use the X key symbol
+        // directly, as it is probably plain ASCII.
+        //
+        if (xcode < 0x100)
+          code = xcode;
+        else
+          break;
+      } else if (code == kbNoKey)
+        //
+        // This key should be ignored.
+        break;
+
+      if (keyboardModifierState & kbShift)
+        KeyboardXlatHash_lookup(shiftKeyTable, code, &code);
+      if (keyboardModifierState & kbCtrlShift)
+        KeyboardXlatHash_lookup(ctrlKeyTable, code, &code);
+      if (keyboardModifierState & kbAltShift)
+        KeyboardXlatHash_lookup(altKeyTable, code, &code);
+
+      event.what = evKeyDown;
+      event.keyDown.controlKeyState = keyboardModifierState;
       event.keyDown.keyCode = code;
-      event.keyDown.controlKeyState = modifiers;
-#endif
-      printf("Key press\n"); 
-      break;
+      return;
     case KeyRelease:
       keyboardModifierState = translateXModifierState(xEvent.xkey.state);
       break;
@@ -559,6 +1027,12 @@ static void freeResources()
 {
         TScreen::drawMouse(0);
         delete[] TScreen::screenBuffer;
+
+	KeyboardXlatHash_free(plainKeyTable);
+	KeyboardXlatHash_free(shiftKeyTable);
+	KeyboardXlatHash_free(ctrlKeyTable);
+	KeyboardXlatHash_free(altKeyTable);
+
         LOG("terminated");
 }
 
@@ -712,6 +1186,15 @@ setupGCs(Display *disp, Window win, Font font)
 			);
 		}
 	}
+
+	/*
+	 * Setup a GC for drawing the text cursor.
+	 */
+	gcv.function = GXxor;
+	gcv.plane_mask = AllPlanes;
+	gcv.foreground = WhitePixel(x_disp, DefaultScreen(x_disp));
+	cursorGC = XCreateGC(disp, win,
+                             GCFunction|GCForeground|GCPlaneMask, &gcv);
 }
 
 /*
@@ -911,6 +1394,10 @@ TScreen::TScreen()
         /* internal stuff */
 	expose_region = XCreateRegion();
 
+	/* Setup keyboard translations */
+
+	setupKeyTables();
+
 	/* setup file descriptors */
 
 	x_disp_fd = ConnectionNumber(x_disp);
@@ -1096,6 +1583,19 @@ void TScreen::putEvent(TEvent &event)
 
 void TScreen::drawCursor(int show)
 {
+  if (cursor_displayed == show)
+    // Cursor is already in desired state.
+    return;
+
+  if (show) {
+    // Turn on the cursor.
+    cursor_displayed = 1;
+    drawTextCursor();
+  } else {
+    // Turn off the cursor.
+    cursor_displayed = 0;
+    eraseTextCursor();
+  }
 }
 
 /*
@@ -1113,8 +1613,12 @@ void TScreen::drawMouse(int show)
 
 void TScreen::moveCursor(int x, int y)
 {
+  if (cursor_displayed)
+    eraseTextCursor();
   curX = x;
   curY = y;
+  if (cursor_displayed)
+    drawTextCursor();
 }
 
 /*
@@ -1167,6 +1671,14 @@ void TScreen::writeRow(int dst, ushort *src, int len)
     XDrawImageString(x_disp, x_win, characterGC[current_color],
                      x * fontWidth, y * fontHeight + fontAscent,
                      chunkBuf, chunk_p - chunkBuf);
+    //
+    // If the cursor is on and we've just drawn over it, redisplay it.
+    //
+    if (cursor_displayed &&
+        curY == y &&
+        curX >= x && curX < (x + (chunk_p - chunkBuf)))
+      drawTextCursor();
+
 #ifdef DEBUG_X
     XFlush(x_disp);
 #endif
