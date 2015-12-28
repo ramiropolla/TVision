@@ -1,4 +1,4 @@
-$Id: readmeX.txt,v 1.3 2004/08/21 01:54:43 jeremy Exp $
+$Id: readmeX.txt,v 1.4 2004/08/28 23:02:18 jeremy Exp $
 
 TVision ported to Linux X Windows
 -----------------------------------------------------------
@@ -12,24 +12,12 @@ X server.
 Release notes
 -----------------------------------------------------------
 
-Release JSC-1.1 notes:
+Release JSC-1.2 notes:
 
-* Fixed ASCII key events so that they adopt their official IBM PC scancodes.
-  Fixes bug in IDA where 'D', 'C', and 'N' keys are unresponsive.
-  Updated remaining code to Datarescue's Level I release.
-
-Release JSC-1.0 notes:
-
-* Keyboard support, text cursor, and mouse support for the second
-  button have been added.  X queue event flushing has been improved, which
-  makes applications appear more responsive.
-
-Release JSC-0.9 notes:
-
-* This release demonstrates the X11 native concept and works well with the
-  mouse pointer, but it completely lacks any keyboard support.  It also
-  does not draw a text cursor.
-  (Keyboard support and cursor will be forthcoming shortly.)
+* Added support for numeric keypad 'multiply' key (*); it was previously
+  missing and not translated.  Also fixed translation of Tab, Enter,
+  Backspace, and Escape keys that was botched with the introduction of
+  scancode translation in release 1.1.
 
 Installation
 -----------------------------------------------------------

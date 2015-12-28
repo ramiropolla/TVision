@@ -1,4 +1,4 @@
-/* $Id: linuxx.cpp,v 1.7 2004/08/20 21:50:17 jeremy Exp $ */
+/* $Id: linuxx.cpp,v 1.8 2004/08/28 22:57:38 jeremy Exp $ */
 /*
  * system.cc
  *
@@ -396,6 +396,8 @@ translateXModifierState(int x_state)
     state |= kbLeftCtrl;
   if (x_state & LockMask)
     state |= kbCapsState;
+  if (x_state & Mod1Mask)
+    state |= kbLeftAlt;
 
   return state;
 }
@@ -468,6 +470,8 @@ static const KeyboardXlat plainXlatSeed[] = {
   { XK_Next,            kbPgDn      },
   { XK_Insert,          kbIns       },
   { XK_Delete,          kbDel       },
+// XXX ASCII dependent
+  { XK_KP_Multiply,     '*'         },
 //
 // These key down events must be ignored because they are not
 // emitted by the IBM PC BIOS.
@@ -749,12 +753,12 @@ char2scancode(uchar code)
     uchar ncode;
 
     static const uchar k2s[] =
-      "\x08\x09\x0D\x1B !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`abcdefghij"
+      " !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`abcdefghij"
       "klmnopqrstuvwxyz{|}~";
 
     static const uchar scv[sizeof(k2s)-1] =
     {
-      0x0E, 0x0F, 0x1C, 0x01, 0x39, 0x02, 0x28, 0x04, 0x05, 0x06, 0x08, 0x28,
+      0x39, 0x02, 0x28, 0x04, 0x05, 0x06, 0x08, 0x28,
       0x0A, 0x0B, 0x09, 0x0D, 0x33, 0x0C, 0x34, 0x35, 0x0B, 0x02, 0x03, 0x04,
       0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x27, 0x27, 0x33, 0x0D, 0x34, 0x35,
       0x03, 0x1A, 0x2B, 0x1B, 0x07, 0x0C, 0x29, 0x1E, 0x30, 0x2E, 0x20, 0x12,
