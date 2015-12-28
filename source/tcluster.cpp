@@ -110,9 +110,9 @@ void TCluster::drawBox( const char *icon, char marker)
             {
             int cur = j * size.y + i;
             int col = column( cur );
-            if ( ( cur < strings->getCount() ) &&
-                (col+cstrlen(getItemText(cur))+5 < maxViewWidth) &&
-                (col<size.x) )
+            if ( cur < strings->getCount() &&
+                (size_t)(col+cstrlen(getItemText(cur))+5) < maxViewWidth &&
+                col<size.x )
                {
                 if( (cur == sel) && (state & sfSelected) != 0 )
                     color = cSel;

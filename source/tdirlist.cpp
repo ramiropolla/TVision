@@ -103,6 +103,8 @@ void TDirListBox::showDrives( TDirCollection *dirs )
         s[ strlen(lastDir)+1 ] = EOS;
         dirs->insert( new TDirEntry( s, oldc ) );
         }
+#else
+    (void)dirs;
 #endif
 }
 

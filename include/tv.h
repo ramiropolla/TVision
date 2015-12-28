@@ -28,7 +28,8 @@
 #define stricmp strcasecmp
 #define strnicmp strncasecmp
 #include <unistd.h>
-void LOG(const char *format, ...);      // debug
+void LOG(const char *format, ...)  // debug
+    __attribute__((__format__(__printf__, 1, 2)));
 #ifdef __MACOSX__
 typedef unsigned long ulong;
 #endif

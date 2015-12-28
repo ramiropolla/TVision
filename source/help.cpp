@@ -99,7 +99,7 @@ void THelpViewer::draw()
         {
         b.moveChar(0, ' ', normal, size.x);
         topic->getLine(i + delta.y, line, sizeof(line));
-        if (strlen(line) > delta.x)
+        if (strlen(line) > (size_t)delta.x)
             {
             bufPtr = line + delta.x;
             strncpy(buffer, bufPtr, size.x);

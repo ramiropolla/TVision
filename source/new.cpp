@@ -50,7 +50,7 @@ void *TBufListEntry::operator new( size_t sz, size_t extra )
     return malloc( sz + extra );        // 25.01.96 ig (by Denis Petroff, 2:5030/287.14)
 }
 
-void *TBufListEntry::operator new( size_t )
+void *TBufListEntry::operator new( size_t ) throw()
 {
     return 0;
 }

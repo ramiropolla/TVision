@@ -25,8 +25,8 @@ TParamText::TParamText( const TRect& bounds,
                         const char *aText,
                         int aParamCount ) :
     TStaticText(bounds, aText),
-    paramList( 0 ),
-    paramCount( aParamCount )
+    paramCount( aParamCount ),
+    paramList( 0 )
 {
 }
 

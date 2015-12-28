@@ -290,7 +290,7 @@ int scan( char *p, int offset, char c)
        return maxViewWidth;
     else
        {
-       if ((int)(temp2 - temp1) <= maxViewWidth )
+       if ((size_t)(temp2 - temp1) <= maxViewWidth )
          return (int) (temp2 - temp1) + 1;
        else
          return maxViewWidth;
@@ -751,7 +751,7 @@ THelpFile::THelpFile( FILE *fp )
     fseek(fp,0,SEEK_END);
     size = ftell(fp);
     fseek(fp,0,SEEK_SET);
-    if (size > sizeof(magic))
+    if (size > (int)sizeof(magic))
         fread(&magic,sizeof(magic),1,fp);
     if (magic != magicHeader)
         {

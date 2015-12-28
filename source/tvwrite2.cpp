@@ -84,7 +84,6 @@ void TView::writeViewRec1(short x1, short x2, TView* p, int shadowCounter ) {
         if ( p->owner->buffer == TScreen::screenBuffer )
         {
 	  TScreen::writeRow(offset, dst, len);
-          TScreen::drawMouse(1);
         }
 #endif
       }
@@ -199,7 +198,7 @@ void TV_CDECL TView::writeChar( short x, short y, char c, uchar color, short cou
   ushort myChar= ( ((ushort)mapColor(color))<<8 ) + (unsigned char) c;
   short count2=count;
   if (x<0) x=0;
-  if (x+count>maxViewWidth) return;
+  if ((size_t)(x+count)>maxViewWidth) return;
   ushort* p = b;
   while ( count-- ) *p++ = myChar;
   writeView( x, x+count2, y, b);

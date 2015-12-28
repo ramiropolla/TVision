@@ -94,7 +94,7 @@ void TTerminal::draw()
     size_t bottomLine;
 
     bottomLine = size.y + delta.y;
-    if( limit.y > bottomLine )
+    if( (size_t)limit.y > bottomLine )
         {
         endLine = prevLines( queFront, limit.y - bottomLine );
         bufDec( endLine );
@@ -121,7 +121,7 @@ void TTerminal::draw()
           s[T] = EOS;
         } else {
           int T = int( bufSize - begLine);
-          if (T>sizeof(s)-2) {         // bugfix JS 26.11.94
+          if (T>(int)sizeof(s)-2) {         // bugfix JS 26.11.94
             memcpy( s, &buffer[begLine], sizeof(s)-2 );
             s[sizeof(s)-2] = EOS;
           } else {
@@ -135,7 +135,7 @@ void TTerminal::draw()
             }
           }
         }
-        if( delta.x >= strlen(s) )
+        if( delta.x >= (int)strlen(s) )
             *s = EOS;
         else if ( delta.x != 0 )
             strcpy( s, &s[delta.x] );
@@ -143,7 +143,7 @@ void TTerminal::draw()
         s[maxViewWidth-1] = EOS;
         writeStr( 0, i, s, 1 );
         const size_t sl=strlen(s);
-        if (sl < size.x) // bugfix JS
+        if (sl < (size_t)size.x) // bugfix JS
           writeChar( sl, i, ' ', 1, /*size.x*/ size.x-sl  );
         endLine = begLine;
         bufDec( endLine );
@@ -166,7 +166,7 @@ int TTerminal::do_sputn( const char *s, int count )
 {
     ushort screenLines = limit.y;
     size_t i;
-    for( i = 0; i < count; i++ )
+    for( i = 0; i < (size_t)count; i++ )
         if( s[i] == '\n' )
             screenLines++;
 

@@ -76,8 +76,8 @@ TSortedListBox::TSortedListBox( const TRect& bounds,
                                 ushort aNumCols,
                                 TScrollBar *aScrollBar) :
     TListBox(bounds, aNumCols, aScrollBar),
-    searchPos( -1 ),
-    shiftState( 0 )
+    shiftState( 0 ),
+    searchPos( -1 )
 {
     showCursor();
     setCursor(1, 0);
@@ -209,7 +209,7 @@ void TFileInfoPane::draw()
 
     color = getColor(0x01);
     b.moveChar( 0, ' ', color, size.x );
-    if ( strlen(path)+3 > size.x ) {
+    if ( (int)strlen(path)+3 > size.x ) {
       b.moveStr( 3, path+(strlen(path)-size.x+4), color );
       b.moveStr( 1, "..", color );
     } else {

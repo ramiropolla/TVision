@@ -49,8 +49,8 @@ TFileDialog::TFileDialog( const char *aWildCard,
                           uchar histId
                         ) :
     TDialog( TRect( 15, 1, 64, 21 ), aTitle ),
-    directory( 0 ),
-    TWindowInit( TFileDialog::initFrame )
+    TWindowInit( TFileDialog::initFrame ),
+    directory( 0 )
 {
     options |= ofCentered;
     strcpy( wildCard, aWildCard );
@@ -146,6 +146,7 @@ static Boolean relativePath( const char *path )
     return True;
 }
 
+#if __FAT__
 static void noWildChars( char *dest, const char *src )
 {
     while( *src != EOS )
@@ -156,6 +157,7 @@ static void noWildChars( char *dest, const char *src )
         }
     *dest = EOS;
 }
+#endif
 
 #ifdef __MSDOS__
 static void trim( char *dest, const char *src )
@@ -267,7 +269,7 @@ void TFileDialog::readDirectory()
     getCurDir( curDir );
 #endif
     if( directory )
-        delete (char *)directory;
+        delete[] directory;
     directory = newStr( curDir );
     fileList->readDirectory( directory, wildCard );
 }
@@ -303,7 +305,10 @@ Boolean TFileDialog::valid(ushort command)
   if ( command == cmValid || command == cmCancel || command == cmFileClear )
        return True;
 
-  char fName[MAXPATH], dir[MAXDIR], name[MAXFILE];
+  char fName[MAXPATH], name[MAXFILE];
+#if __FAT__
+  char dir[MAXDIR];
+#endif
 
   getFileName(fName);
   if ( isWild(fName) )
@@ -320,7 +325,7 @@ Boolean TFileDialog::valid(ushort command)
 #endif
     if ( checkDirectory( path ) )
     {
-      delete (char *)directory;
+      delete[] directory;
       directory = newStr( path );
       strcpy( wildCard, name );
       if( command != cmFileInit ) fileList->select();

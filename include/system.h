@@ -318,7 +318,9 @@ public:
 
     friend class TView;
     friend void genRefs();
+#ifndef __LINUX__
     friend unsigned long getTicks(void);
+#endif    
     friend class TProgram;
     static ushort doubleDelay;
     static Boolean mouseReverse;
@@ -448,8 +450,6 @@ public:
      * Do not use it, use @ref TProgram::putEvent() if you need.
      */
     static void putEvent(TEvent &event);
-    // Get keyboard or mouse event
-    static void get_key_mouse_event(TEvent &event);
 #endif
     /**
      * Recovers the execution of the application.
@@ -475,12 +475,6 @@ public:
      */
     static void drawCursor(int show);
     /**
-     * Shows or hides the mouse pointer.
-     *
-     * Flag `show' specifies the operation to perform.
-     */
-    static void drawMouse(int show);
-    /**
      * Moves the cursor to another place.
      *
      * Parameters `x' and `y' are 0-based.
@@ -494,12 +488,6 @@ public:
      * of pairs.
      */
     static void writeRow(int dst, ushort *src, int len);
-    static fd_set fdSetRead;
-    static fd_set fdSetWrite;
-    static fd_set fdSetExcept;
-    static fd_set fdActualRead;
-    static fd_set fdActualWrite;
-    static fd_set fdActualExcept;
 #endif
 
     static void setVideoMode( ushort mode );

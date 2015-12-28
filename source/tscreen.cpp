@@ -52,6 +52,7 @@ ushort TScreen::cursorLines = 0;
 #define maxViewHeight 300
 #endif
 
+#ifndef __LINUX__
 static void checksize(int height, int width)
 {
   if ( height > maxViewHeight )
@@ -59,12 +60,13 @@ static void checksize(int height, int width)
     fprintf(stderr,"\n\n\nFatal error: the window is too high (max %d rows)!\n", maxViewHeight);
     _exit(0);
   }
-  if ( width > maxViewWidth )
+  if ( (size_t)width > maxViewWidth )
   {
     fprintf(stderr,"\n\n\nFatal error: the window is too wide (max %d columns)!\n", maxViewWidth);
     _exit(0);
   }
 }
+#endif // !__LINUX__
 
 //--------------------------------------------------------------------------
 
@@ -465,11 +467,13 @@ void TDisplay::setCrtMode( ushort mode )
 //
   TThreads::crInfo.bVisible = True;
   TThreads::crInfo.dwSize = 10;         // small cursor
-  int code = SetConsoleCursorInfo(TThreads::chandle[cnOutput],&TThreads::crInfo);
+//  int code =
+    SetConsoleCursorInfo(TThreads::chandle[cnOutput],&TThreads::crInfo);
 //doom("set_cursor_info %d %d %d\n", TThreads::chandle[cnOutput], code, GetLastError());
 
   COORD zero = { 0, 0 };
-  code = SetConsoleCursorPosition(TThreads::chandle[cnOutput], zero);
+//  code =
+    SetConsoleCursorPosition(TThreads::chandle[cnOutput], zero);
 //doom("set_cursor_pos %d %d %d\n", TThreads::chandle[cnOutput], code, GetLastError());
 
   if ( oldr <= rows )
@@ -479,18 +483,21 @@ void TDisplay::setCrtMode( ushort mode )
 BUFWIN:
 //doom("1bufsize %d (%d,%d)\n", TThreads::chandle[cnOutput], newSize.X, newSize.Y);
 //      SetLastError(0);
-      code = SetConsoleScreenBufferSize( TThreads::chandle[cnOutput], newSize );
+//      code =
+      SetConsoleScreenBufferSize( TThreads::chandle[cnOutput], newSize );
 //doom("1bufsize %d %d\n", code, GetLastError());
 //doom("2windowinfo %d (%d,%d)-(%d,%d)\n", TThreads::chandle[cnOutput], rect.Left, rect.Top, rect.Right, rect.Bottom);
 //      SetLastError(0);
-      code = SetConsoleWindowInfo( TThreads::chandle[cnOutput], True, &rect );
+//      code =
+      SetConsoleWindowInfo( TThreads::chandle[cnOutput], True, &rect );
 //doom("2windowinfo %d %d\n", code, GetLastError());
     }
     else
     {                           // cols--, rows+
       SMALL_RECT tmp = { 0, 0, cols-1, oldr-1 };
 //      SetLastError(0);
-      code = SetConsoleWindowInfo( TThreads::chandle[cnOutput], True, &tmp );
+//      code =
+      SetConsoleWindowInfo( TThreads::chandle[cnOutput], True, &tmp );
 //doom("3windowinfo %d %d %d (%d,%d)-(%d,%d)\n", code, TThreads::chandle[cnOutput], GetLastError(), tmp.Left, tmp.Top, tmp.Right, tmp.Bottom);
       goto BUFWIN;
     }
@@ -501,7 +508,8 @@ BUFWIN:
     {                           // cols+, rows--
       SMALL_RECT tmp = { 0, 0, oldc-1, rows-1 };
 //      SetLastError(0);
-      code = SetConsoleWindowInfo( TThreads::chandle[cnOutput], True, &tmp );
+//      code =
+      SetConsoleWindowInfo( TThreads::chandle[cnOutput], True, &tmp );
 //doom("4windowinfo %d %d %d (%d,%d)-(%d,%d)\n", code, TThreads::chandle[cnOutput], GetLastError(), tmp.Left, tmp.Top, tmp.Right, tmp.Bottom);
       goto BUFWIN;
     }
@@ -509,12 +517,14 @@ BUFWIN:
     {                           // cols--, rows--
 //doom("5windowinfo %d (%d,%d)-(%d,%d)\n", TThreads::chandle[cnOutput], rect.Left, rect.Top, rect.Right, rect.Bottom);
 //      SetLastError(0);
-      code = SetConsoleWindowInfo( TThreads::chandle[cnOutput], True, &rect );
+//      code =
+      SetConsoleWindowInfo( TThreads::chandle[cnOutput], True, &rect );
 //doom("5windowinfo %d %d\n", code, GetLastError());
 
 //doom("6bufsize %d (%d,%d)\n", TThreads::chandle[cnOutput], newSize.X, newSize.Y);
 //      SetLastError(0);
-      code = SetConsoleScreenBufferSize( TThreads::chandle[cnOutput], newSize );
+//      code =
+      SetConsoleScreenBufferSize( TThreads::chandle[cnOutput], newSize );
 //doom("6bufsize %d %d\n", code, GetLastError());
     }
   }
@@ -624,5 +634,7 @@ void TScreen::setVideoMode( ushort mode )
 #ifndef __LINUX__
     setCrtMode( fixCrtMode( mode ) );
     setCrtData();
+#else  // __LINUX__
+   (void)mode;
 #endif // !__LINUX__
 }

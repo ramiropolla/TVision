@@ -128,7 +128,7 @@ $(R)libtvisionx.so: $(OBJS_XWIN) $(EXPORTS_DEF)
 	-L/usr/X11R6/lib
 
 ./hello: hello$(O) $(OBJS_XTERM)
-	$(CCPLUS) -o $@ hello$(O) $(OBJS_XTERM)
+	$(CCPLUS) -o $@ hello$(O) $(OBJS_XTERM) -ldl
 
 ./hellox: hello$(O) $(OBJS_XWIN)
 	$(CCPLUS) -o $@ hello$(O) $(OBJS_XWIN) -L/usr/X11R6/lib -lX11

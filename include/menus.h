@@ -629,7 +629,7 @@ inline TStatusItem::TStatusItem( const char *aText,
                                  ushort cmd,
                                  TStatusItem *aNext
                                 ) :
-    text( aText ), keyCode( key ), command( cmd ), next( aNext )
+    next( aNext ), text( aText ), keyCode( key ), command( cmd )
 {
 }
 
@@ -660,7 +660,7 @@ inline TStatusDef::TStatusDef( ushort aMin,
                                TStatusItem *someItems,
                                TStatusDef *aNext
                              ) :
-    lmin( aMin ), lmax( aMax ), items( someItems ), next( aNext )
+    next( aNext ), lmin( aMin ), lmax( aMax ), items( someItems )
 {
 }
 

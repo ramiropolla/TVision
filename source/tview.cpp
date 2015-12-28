@@ -51,8 +51,8 @@ static TCommandSet initCommands()
 TCommandSet TView::curCommandSet = initCommands();
 
 TView::TView( const TRect& bounds) :
-    owner( 0 ), next( 0 ), options( 0 ), state( sfVisible ),
-    growMode( 0 ), dragMode( dmLimitLoY ), helpCtx( hcNoContext )
+    next( 0 ), options( 0 ), state( sfVisible ), growMode( 0 ),
+    dragMode( dmLimitLoY ), helpCtx( hcNoContext ), owner( 0 )
 {
     eventMask = evMouseDown | evKeyDown | evCommand;
     setBounds( bounds);

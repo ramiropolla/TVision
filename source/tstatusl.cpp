@@ -109,7 +109,7 @@ void TStatusLine::drawSelect( TStatusItem *selected )
             {
             b.moveStr( i, hintSeparator, cNormal );
             i += 2;
-            if( strlen(hintBuf) + i > size.x )
+            if( strlen(hintBuf) + i > (size_t)size.x )
                 hintBuf[size.x-i] = EOS;
             b.moveStr( i, hintBuf, cNormal );
 //            i += strlen(hintBuf);

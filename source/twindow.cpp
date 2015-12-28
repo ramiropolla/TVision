@@ -42,12 +42,12 @@ TWindow::TWindow( const TRect& bounds,
                   short aNumber
                 ) :
     TGroup( bounds ),
+    TWindowInit( TWindow::initFrame ),
     flags( wfMove | wfGrow | wfClose | wfZoom ),
     zoomRect( getBounds() ),
     number( aNumber ),
     palette( wpBlueWindow ),
-    title( newStr( aTitle ) ),
-    TWindowInit( TWindow::initFrame )
+    title( newStr( aTitle ) )
 {
     state |= sfShadow;
     options |= ofSelectable | ofTopSelect;

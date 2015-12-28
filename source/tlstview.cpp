@@ -33,10 +33,10 @@ TListViewer::TListViewer( const TRect& bounds,
                           TScrollBar *aHScrollBar,
                           TScrollBar *aVScrollBar) :
     TView( bounds ),
-    range( 0 ),
     numCols( aNumCols ),
+    topItem( 0 ),
     focused( 0 ),
-    topItem( 0 )
+    range( 0 )
 {
     int arStep, pgStep;
 
@@ -89,6 +89,7 @@ void TListViewer::draw()
         {
         normalColor = getColor(2);
         selectedColor = getColor(4);
+        focusedColor = 0; // ONLY to disable warning -- really not used
         }
 
     if( hScrollBar != 0 )
@@ -129,7 +130,7 @@ void TListViewer::draw()
                 getText( text, item, colWidth + indent );
                 char buf[MAXSTR];
                 buf[0] = '\0';
-                if ( strlen(text) > indent ) {
+                if ( strlen(text) > (size_t)indent ) {
                   memcpy( buf, text+indent, colWidth );
                   buf[colWidth] = EOS;
                 }

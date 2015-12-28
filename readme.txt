@@ -2,7 +2,7 @@
 TVision by Borland ported to OS/2, MS Windows, DOS32, Linux
 -----------------------------------------------------------
 
-                                                Version Level H
+                                                Version Level I (beta)
 
 This port is partially based on the port of TVision to FreeBSD made by
 Sergio Sigala.
@@ -37,3 +37,13 @@ better, to fix the found bugs :)
 
 With best regards,
 Ilfak Guilfanov at Datarescue <ig@datarescue.be>
+
+Level I news
+------------
+
+The linux part has been completely rewritten by Yury Haron <yjh@styx.cabel.net>.
+Now the curses and X11 support are back.
+Russian font/keyboard support has been added.
+The TVOPT environment variable is added - it contains parameters to fine-tune
+TVision.
+See tvtuning.txt for information.

@@ -63,7 +63,7 @@ Boolean TInputLine::canScroll( int delta )
         return Boolean( firstPos > 0 );
     else
         if( delta > 0 )
-            return Boolean( strlen(data) - firstPos + 2 > size.x );
+            return Boolean( strlen(data) - firstPos + 2 > (size_t)size.x );
         else
             return False;
 }

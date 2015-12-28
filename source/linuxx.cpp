@@ -1,4 +1,4 @@
-/* $Id: linuxx.cpp,v 1.5 2004/08/20 00:05:14 jeremy Exp $ */
+/* $Id: linuxx.cpp,v 1.7 2004/08/20 21:50:17 jeremy Exp $ */
 /*
  * system.cc
  *
@@ -268,8 +268,6 @@ ushort TScreen::screenMode;
 int TScreen::screenWidth;
 int TScreen::screenHeight;
 ushort *TScreen::screenBuffer;
-fd_set TScreen::fdSetRead;
-fd_set TScreen::fdActualRead;
 
 static TEvent *evIn;            /* message queue system */
 static TEvent *evOut;
@@ -745,6 +743,34 @@ KeyboardXlatHash_lookup(KeyboardXlatHash *h, int in, int *out)
   return 0;
 }
 
+static inline int
+char2scancode(uchar code)
+{
+    uchar ncode;
+
+    static const uchar k2s[] =
+      "\x08\x09\x0D\x1B !\"#$%&'()*+,-./0123456789:;<=>?@[\\]^_`abcdefghij"
+      "klmnopqrstuvwxyz{|}~";
+
+    static const uchar scv[sizeof(k2s)-1] =
+    {
+      0x0E, 0x0F, 0x1C, 0x01, 0x39, 0x02, 0x28, 0x04, 0x05, 0x06, 0x08, 0x28,
+      0x0A, 0x0B, 0x09, 0x0D, 0x33, 0x0C, 0x34, 0x35, 0x0B, 0x02, 0x03, 0x04,
+      0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x27, 0x27, 0x33, 0x0D, 0x34, 0x35,
+      0x03, 0x1A, 0x2B, 0x1B, 0x07, 0x0C, 0x29, 0x1E, 0x30, 0x2E, 0x20, 0x12,
+      0x21, 0x22, 0x23, 0x17, 0x24, 0x25, 0x26, 0x32, 0x31, 0x18, 0x19, 0x10,
+      0x13, 0x1F, 0x14, 0x16, 0x2F, 0x11, 0x2D, 0x15, 0x2C, 0x1A, 0x2B, 0x1B,
+      0x29
+    };
+
+    ncode = (uchar)tolower(code);
+
+    unsigned id = (uchar *)memchr(k2s, ncode, sizeof(scv)) - k2s;
+    if(id >= sizeof(scv)) return(code);
+
+    return(((unsigned)scv[id]) << 8 | code);
+}
+
 static KeyboardXlatHash *plainKeyTable;
 static KeyboardXlatHash *shiftKeyTable;
 static KeyboardXlatHash *ctrlKeyTable;
@@ -788,12 +814,12 @@ setupKeyTables()
 /*
  * Reads a key from the keyboard.
  */
-void TScreen::get_key_mouse_event(TEvent &event)
+static void
+get_key_mouse_event(TEvent &event)
 {
   XEvent xEvent;
   int num_events;
   int button;
-
 
   event.what = evNothing;
 
@@ -806,8 +832,12 @@ void TScreen::get_key_mouse_event(TEvent &event)
   if ( XEventsQueued(x_disp, QueuedAfterFlush) == 0 &&
        TProgram::event_delay != 0)
   {
-    fdActualRead = fdSetRead;
-    select(FD_SETSIZE, &fdActualRead, NULL, NULL, NULL);
+    fd_set fdSetRead;
+
+    FD_ZERO(&fdSetRead);
+    FD_SET(x_disp_fd, &fdSetRead);
+
+    select(x_disp_fd + 1, &fdSetRead, NULL, NULL, NULL);
   }
 
   num_events = XEventsQueued(x_disp, QueuedAfterFlush);
@@ -916,7 +946,7 @@ void TScreen::get_key_mouse_event(TEvent &event)
 
       keyboardModifierState = translateXModifierState(xEvent.xkey.state);
 
-       XLookupString(&xEvent.xkey, NULL, 0, &xcode, NULL);
+      XLookupString(&xEvent.xkey, NULL, 0, &xcode, NULL);
       if (xcode == NoSymbol)
         break;
 
@@ -926,13 +956,25 @@ void TScreen::get_key_mouse_event(TEvent &event)
         // find a plain mapping from X to TVision, just use the X key symbol
         // directly, as it is probably plain ASCII.
         //
-        if (xcode < 0x100)
+        if (xcode < 0x100) {
+          //
+          // The character is a plain ASCII or extended character.
+          // No translation needed.
+          //
           code = xcode;
-        else
+        } else {
+          //
+          // The character is outside the ASCII or extended set.  It slipped
+          // through our translation routines and thus, is probably incorrectly
+          // translated.  Sending it up to the TVision routines as is would be
+          // an error.
+          //
           break;
+        }
       } else if (code == kbNoKey)
         //
-        // This key should be ignored.
+        // This key is to be ignored.
+        //
         break;
 
       if (keyboardModifierState & kbShift)
@@ -941,6 +983,14 @@ void TScreen::get_key_mouse_event(TEvent &event)
         KeyboardXlatHash_lookup(ctrlKeyTable, code, &code);
       if (keyboardModifierState & kbAltShift)
         KeyboardXlatHash_lookup(altKeyTable, code, &code);
+
+      //
+      // If the character is still plain ASCII after all this translation,
+      // then it needs an additional translation to make it a fully formed
+      // IBM PC scan code.
+      //
+      if (code < 0x100)
+        code = char2scancode(code);
 
       event.what = evKeyDown;
       event.keyDown.controlKeyState = keyboardModifierState;
@@ -953,12 +1003,15 @@ void TScreen::get_key_mouse_event(TEvent &event)
       XRefreshKeyboardMapping(&xEvent.xmapping);
       break;
     case ConfigureNotify:
-      screenWidth = range(xEvent.xconfigure.width / fontWidth, 4, maxViewWidth);
-      screenHeight = range(xEvent.xconfigure.height / fontHeight, 4, 100);
-      delete[] screenBuffer;
-      screenBuffer = new ushort[screenWidth * screenHeight];
-      LOG("screen resized to %dx%d", screenWidth, screenHeight);
-      drawCursor(0); /* hide the cursor */
+      TScreen::screenWidth = range(xEvent.xconfigure.width / fontWidth,4, maxViewWidth);
+      TScreen::screenHeight = range(xEvent.xconfigure.height / fontHeight,
+        4, 100);
+      delete[] TScreen::screenBuffer;
+      TScreen::screenBuffer = new ushort[
+        TScreen::screenWidth * TScreen::screenHeight];
+      LOG("screen resized to %dx%d", TScreen::screenWidth,
+        TScreen::screenHeight);
+      TScreen::drawCursor(0); /* hide the cursor */
       event.message.command = cmSysResize;
       event.what = evCommand;
       return;
@@ -1025,7 +1078,6 @@ static int confirmExit()
 
 static void freeResources()
 {
-        TScreen::drawMouse(0);
         delete[] TScreen::screenBuffer;
 
 	KeyboardXlatHash_free(plainKeyTable);
@@ -1402,9 +1454,6 @@ TScreen::TScreen()
 
 	x_disp_fd = ConnectionNumber(x_disp);
 
-	FD_ZERO(&TScreen::fdSetRead);
-	FD_SET(x_disp_fd, &TScreen::fdSetRead);
-
         curX = curY = 0;
         cursor_displayed = true;
         currentTime = doRepaint = evLength = 0;
@@ -1492,7 +1541,7 @@ void TEvent::_getKeyEvent(void)
 {
   if ( !find_event_in_queue(true, this) )
   {
-    TScreen::get_key_mouse_event(*this);
+    get_key_mouse_event(*this);
     if ( what != evKeyDown )
     {
       TScreen::putEvent(*this);
@@ -1505,7 +1554,7 @@ void TEventQueue::getMouseEvent(TEvent &event)
 {
 //  if ( !find_event_in_queue(true, &event) )
   {
-    TScreen::get_key_mouse_event(event);
+    get_key_mouse_event(event);
     if ( (event.what & evMouse) == 0 )
     {
       TScreen::putEvent(event);
@@ -1596,15 +1645,6 @@ void TScreen::drawCursor(int show)
     cursor_displayed = 0;
     eraseTextCursor();
   }
-}
-
-/*
- * Hides or shows the mouse pointer.
- */
-
-void TScreen::drawMouse(int show)
-{
-  // we do not draw the mouse cursor ourselves
 }
 
 /*

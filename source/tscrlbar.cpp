@@ -131,7 +131,7 @@ int TScrollBar::getPartCode()
 void TScrollBar::handleEvent( TEvent& event )
 {
     Boolean Tracking;
-    int i, clickPart;
+    int clickPart, i = 0; //i is initialized to remove diagnostic ONLY
 
     TView::handleEvent(event);
     switch( event.what )

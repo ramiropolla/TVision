@@ -161,8 +161,8 @@ Boolean TEditor::insertBuffer( char *p,
 
     long newSize = long(bufLen + delCount - selLen + delLen) + length;
 
-    if( newSize > bufLen + delCount )
-        if( newSize > (UINT_MAX-0x1F) || setBufSize(size_t(newSize)) == False )
+    if( (size_t)newSize > (bufLen + delCount) )
+        if( (size_t)newSize > (UINT_MAX-0x1F) || setBufSize(size_t(newSize)) == False )
             {
             editorDialog( edOutOfMemory );
             return False;

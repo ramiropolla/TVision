@@ -27,7 +27,7 @@
 TView *TheTopView = 0;
 
 TGroup::TGroup( const TRect& bounds ) :
-    TView(bounds), last( 0 ), phase( phFocused ), current( 0 ), buffer( 0 ),
+    TView(bounds), current( 0 ), last( 0 ), phase( phFocused ), buffer( 0 ),
     lockFlag( 0 ), endState( 0 )
 {
     options |= ofSelectable | ofBuffered;
@@ -279,6 +279,7 @@ static void doHandleEvent( TView *p, void *s )
         case TView::phPostProcess:
             if( (p->options & ofPostProcess) == 0 )
                 return;
+        default:
             break;
         }
     if( (ptr->event.what & p->eventMask) != 0 )

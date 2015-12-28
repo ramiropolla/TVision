@@ -31,7 +31,7 @@
 #include <assert.h>
 #endif
 
-TEvent TEventQueue::eventQueue[ eventQSize ] = { {0} };
+TEvent TEventQueue::eventQueue[ eventQSize ];
 TEvent *TEventQueue::eventQHead = TEventQueue::eventQueue;
 TEvent *TEventQueue::eventQTail = TEventQueue::eventQueue;
 Boolean TEventQueue::mouseIntFlag = False;
@@ -682,7 +682,7 @@ void TEvent::_getKeyEvent()
 
 //========================================================================
 
-macro_handler_t macro_handler = { NULL };
+macro_handler_t macro_handler;
 
 void TEvent::getKeyEvent()
 {

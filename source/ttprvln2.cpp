@@ -43,7 +43,7 @@ size_t TV_CDECL TTerminal::prevLines( size_t pos, int lines ) {
         }
         counter--;
         if ( counter == 0 ) {
-          if ( ptr-buffer+1 == queBack ) return queBack;
+          if ( ptr-buffer+1 == (int)queBack ) return queBack;
           ptr = buffer + bufSize;
           break;
         }

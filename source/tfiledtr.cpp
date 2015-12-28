@@ -102,7 +102,7 @@ Boolean TFileEditor::loadFile()
           fseek(fi, 0, SEEK_END);
           long fSize = ftell(fi);
           fseek(fi, 0, SEEK_SET);
-        if( fSize > (UINT_MAX-0x1F) || setBufSize(size_t(fSize)) == False )
+        if( fSize > (long)(UINT_MAX-0x1F) || setBufSize(size_t(fSize)) == False )
             {
             fclose(fi);
             editorDialog( edOutOfMemory );

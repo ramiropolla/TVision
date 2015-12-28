@@ -41,8 +41,8 @@
 #include <tv.h>
 
 TNSCollection::TNSCollection( ccIndex aLimit, ccIndex aDelta ) :
-    count( 0 ),
     items( 0 ),
+    count( 0 ),
     limit( 0 ),
     delta( aDelta ),
     shouldDelete( True )
@@ -51,8 +51,8 @@ TNSCollection::TNSCollection( ccIndex aLimit, ccIndex aDelta ) :
 }
 
 TNSCollection::TNSCollection() :
-    count( 0 ),
     items( 0 ),
+    count( 0 ),
     limit( 0 ),
     delta( 0 ),
     shouldDelete( True )
@@ -212,7 +212,7 @@ void TNSCollection::setLimit(ccIndex aLimit)
 {
     if( aLimit < count )
         aLimit =  count;
-    if( aLimit > maxCollectionSize)
+    if( (size_t)aLimit > maxCollectionSize)
         aLimit = maxCollectionSize;
     if( aLimit != limit )
         {

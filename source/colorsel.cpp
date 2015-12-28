@@ -326,8 +326,8 @@ TMonoSelector::TMonoSelector( StreamableInit ) : TCluster( streamableInit )
 
 TColorDisplay::TColorDisplay( const TRect& bounds, const char *aText ) :
     TView( bounds ),
-    text( newStr( aText ) ),
-    color( 0 )
+    color( 0 ),
+    text( newStr( aText ) )
 {
   eventMask |= evBroadcast;
 }

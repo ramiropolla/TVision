@@ -1,4 +1,4 @@
-$Id: readmeX.txt,v 1.2 2004/08/20 00:05:35 jeremy Exp $
+$Id: readmeX.txt,v 1.3 2004/08/21 01:54:43 jeremy Exp $
 
 TVision ported to Linux X Windows
 -----------------------------------------------------------
@@ -11,6 +11,12 @@ X server.
 
 Release notes
 -----------------------------------------------------------
+
+Release JSC-1.1 notes:
+
+* Fixed ASCII key events so that they adopt their official IBM PC scancodes.
+  Fixes bug in IDA where 'D', 'C', and 'N' keys are unresponsive.
+  Updated remaining code to Datarescue's Level I release.
 
 Release JSC-1.0 notes:
 
