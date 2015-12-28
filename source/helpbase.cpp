@@ -328,7 +328,7 @@ char *THelpTopic::wrapText( char *text, int size,
       if ( i == offset ) i = offset + width;
       i -= offset;
     }
-    qstrncpy(line, text+offset, qmin(i+1,lineBufLen));
+    qstrncpy(line, text+offset, qmin((size_t)(i+1),lineBufLen));
     // remove the last '\n'
     size_t len = strlen(line);
     offset += len;
@@ -843,7 +843,7 @@ THelpFile::~THelpFile(void)
 {
 }
 
-extern char *ActionKey(const char *str);
+extern void ActionKey(const char *str, char *buf, size_t bufsize);
 
 // return the new text (possibly reallocated, if not enough space in the original buffer)
 static char *addxrefs( THelpTopic *topic, char *text, size_t textsize ) { /* ig 22.04.93 */
@@ -855,9 +855,11 @@ static char *addxrefs( THelpTopic *topic, char *text, size_t textsize ) { /* ig 
     text++;
     if ( text[0] == '<' ) {                     /* User function, 07.11.93 */
       char *end = strchr(text,'>');
-      if ( end != NULL ) {
+      if ( end != NULL )
+      {
         *end++ = '\0';
-        char *actionkey = ActionKey(text+1);
+        char actionkey[MAXSTR];
+        ActionKey(text+1, actionkey, sizeof(actionkey));
         int resize = text + strlen(actionkey) - end; // how many bytes must we add to the string ?
         if (resize > 0) // if the buffer needs resizing,
         {
@@ -900,31 +902,32 @@ static char *addxrefs( THelpTopic *topic, char *text, size_t textsize ) { /* ig 
 
 THelpTopic *THelpFile::getTopic( int i )
 {
-    const char *ctext;
-    char buf[80];
+    char *text;
     while ( 1 ) {
       switch ( i ) {
         case 0:
-          ctext = NULL;
+          text = NULL;
           break;
         case 0xFFFE:
-          ctext = tv_dynhelp;
+          text = qstrdup(tv_dynhelp);
           break;
         default:
-          ctext = ivalue1(i);
+          text = qivalue(i);
           break;
       }
-      if ( ctext == NULL ) {
+      if ( text == NULL )
+      {
+        char buf[80];
         qsnprintf(buf, sizeof(buf),
                   "\nNo help available for this context.\n"
                   "  (context number: %d)",
                   i);
-        ctext = buf;
+        text = qstrdup(buf);
       }
       int tmp;
-      if ( sscanf(ctext,"@%d:%d",&tmp,&i) != 2 ) break;
+      if ( sscanf(text,"@%d:%d",&tmp,&i) != 2 ) break;
+      qfree(text);
     }
-    char *text = newStr(ctext);
     THelpTopic *topic = new THelpTopic;
     TParagraph *para  = new TParagraph;
     size_t len = strlen(text);

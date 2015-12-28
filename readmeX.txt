@@ -1,4 +1,4 @@
-$Id: readmeX.txt,v 1.6 2005/06/06 06:52:16 jeremy Exp $
+$Id: readmeX.txt,v 1.7 2005/10/11 02:52:27 jeremy Exp $
 
 TVision ported to Linux X Windows
 -----------------------------------------------------------
@@ -11,11 +11,10 @@ a "VGA" font on your X server.
 Release notes
 -----------------------------------------------------------
 
-Release JSC-1.4 notes:
+Release JSC-1.5 notes:
 
-* Fixed missing implementations of TProgram::at_child_exec() and
-  TProgram::switch_screen() that were preventing the use of the IDA
-  debugger.  Reported by Eberhard Mattes.
+* Incorporated changes in DataRescue's TVision L release.  Compatability
+  with IDA 4.9.
 
 Installation
 -----------------------------------------------------------

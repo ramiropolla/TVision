@@ -344,9 +344,9 @@ void TColorDisplay::draw()
     if( c == 0 )
         c = errorAttr;
 #endif
-    const int len = strlen( text );
+    const size_t len = strlen( text );
     TDrawBuffer b;
-    for( int i = 0; i <= size.x/len; i++ )
+    for( unsigned i = 0; i <= size.x/len; i++ )
         b.moveStr( i*len, text, c );
     writeLine( 0, 0, size.x, size.y, b );
 }
@@ -693,7 +693,7 @@ size_t TColorDialog::dataSize()
 
 void TColorDialog::getData( void *rec, size_t recsize )
 {
-    size_t s = qmin(*pal->data+1, recsize);
+    size_t s = qmin((size_t)(*pal->data+1), recsize);
     memcpy( rec, pal->data, s );
 }
 

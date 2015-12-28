@@ -13,7 +13,11 @@
 // Declarations of basic system independent functions
 // This comes from IDA Pro
 
+#ifdef __IDA__
 #include <pro.h>
+#else
+#include <_extrn.h>
+#endif
 
 void fexpand( char *path, size_t pathsize );
 

@@ -42,7 +42,7 @@ size_t TMemo::dataSize()
 void TMemo::getData( void *rec, size_t recsize )
 {
   TMemoData *data = (TMemoData *)rec;
-  if ( ssize_t(recsize) >= sizeof(data->length)+bufSize )
+  if ( ssize_t(recsize) >= (ssize_t)(sizeof(data->length)+bufSize) )
   {
     data->length = bufLen;
     memcpy(data->buffer, buffer, curPtr);

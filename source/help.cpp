@@ -37,7 +37,9 @@
 #include <limits.h>
 #include <sys/stat.h>
 
+#ifdef __IDA__
 #include <pro.h>
+#endif
 
 int tv_helpIndex;
 int tv_idcIndex;
@@ -131,7 +133,7 @@ void THelpViewer::draw()
         {
         b.moveChar(0, ' ', normal, size.x);
         topic->getLine(i + delta.y, line, sizeof(line));
-        if (strlen(line) > delta.x)
+        if ((int)strlen(line) > delta.x)
             {
             bufPtr = line + delta.x;
             qstrncpy(buffer, bufPtr, qmin(size.x+1, sizeof(buffer)));

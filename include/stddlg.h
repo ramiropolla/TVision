@@ -20,7 +20,9 @@
 #if defined( Uses_TSearchRec ) && !defined( __TSearchRec )
 #define __TSearchRec
 
+#ifdef __IDA__
 #include <prodir.h>
+#endif
 
 struct dos_ftime
 {
@@ -387,7 +389,9 @@ const int
                                    // WildCard by using SetData or store
                                    // the dialog on a stream.
 
+#ifdef __IDA__
 #include <prodir.h>
+#endif
 
 class TEvent;
 class TFileInputLine;
@@ -580,7 +584,9 @@ inline TDirEntry *TDirCollection::lastThat( ccTestFunc func, void *arg )
 #if defined( Uses_TDirListBox ) && !defined( __TDirListBox )
 #define __TDirListBox
 
+#ifdef __IDA__
 #include <prodir.h>
+#endif
 
 class TRect;
 class TScrollBar;

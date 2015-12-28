@@ -35,11 +35,6 @@
 #include <pro.h>
 #else
 #include <string.h>
-// if the target system doesn't have snprintf(), use sprintf()
-inline void qvsnprintf(char *buf, size_t bufsize, const char *format, va_list va)
-{
-  vsprintf(buf, format, va);
-}
 #endif
 
 static const char *buttonName[] =

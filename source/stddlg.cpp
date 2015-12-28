@@ -31,7 +31,9 @@
 #define Uses_TFileDialog
 #define Uses_TSortedCollection
 #include <tv.h>
+#ifdef __IDA__
 #include <prodir.h>
+#endif
 
 #include <stdio.h>
 #ifdef __NT__
@@ -234,7 +236,7 @@ void TFileInfoPane::draw()
     }
 #endif // __NT__
     fpos = strlen(pfn);
-    if(fpos+3 <= size.x) fpos = 1;
+    if(fpos+3 <= (size_t)size.x) fpos = 1;
     else {
       b.moveStr( 1, "..", color );
       pfn += fpos-size.x+4;

@@ -137,7 +137,7 @@ void TCluster::drawBox( const char *icon, char marker)
 
 void TCluster::getData(void * rec, size_t recsize)
 {
-  if ( ssize_t(recsize) >= sizeof(ushort) )
+  if ( ssize_t(recsize) >= (ssize_t)sizeof(ushort) )
     *(ushort*)rec = value;
 }
 

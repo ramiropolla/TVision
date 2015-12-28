@@ -375,7 +375,7 @@ void  TInputLine::handleEvent( TEvent& event )
                                 if( curPos < (int) strlen(data) )
                                     qstrncpy( data + curPos, data + curPos + 1, maxLen+1-curPos );
 
-                                if( strlen(data) < maxLen )
+                                if( (int)strlen(data) < maxLen )
                                     {
                                     if( firstPos > curPos )
                                         firstPos = curPos;

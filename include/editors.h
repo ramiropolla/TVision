@@ -468,7 +468,9 @@ inline opstream& operator << ( opstream& os, TMemo* cl )
 #if defined( Uses_TFileEditor ) && !defined( __TFileEditor )
 #define __TFileEditor
 
+#ifdef __IDA__
 #include <prodir.h>
+#endif
 
 class TRect;
 class TScrollBar;

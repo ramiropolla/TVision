@@ -48,7 +48,7 @@ size_t TListBox::dataSize()
 
 void TListBox::getData( void * rec, size_t recsize )
 {
-  if ( ssize_t(recsize) >= sizeof(TListBoxRec) )
+  if ( ssize_t(recsize) >= (ssize_t)sizeof(TListBoxRec) )
   {
     TListBoxRec *p = (TListBoxRec *)rec;
     p->items = items;

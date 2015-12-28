@@ -14,7 +14,9 @@
 #define Uses_TKeys
 #define Uses_TProgram
 #include <tv.h>
+#ifdef __IDA__
 #include <prodir.h>
+#endif
 
 #include <stdio.h>
 #include <assert.h>
@@ -177,7 +179,7 @@ unsigned long getTicks() {
 // especially useful for the @ key using AltGr on German keyboards.
 // (see http://www.cygwin.com/ml/cygwin/2001-06/msg01007.html
 // for a full description of the different 9X/NT problems)
-static inline uchar get_alt_pressed_mask(void)
+static uchar get_alt_pressed_mask(void)
 {
   static uchar alt_pressed_mask = 0;
   if (alt_pressed_mask == 0) // initialize if not already done
@@ -495,7 +497,6 @@ char *TThreads::clipboard_get(size_t &sz, bool line)
                 }
             GlobalUnlock(hMem);
             }
-close_done:
         CloseClipboard();
         }
     return answer;

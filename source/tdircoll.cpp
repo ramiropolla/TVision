@@ -21,7 +21,9 @@
 #define Uses_ipstream
 #define Uses_TThreaded
 #include <tv.h>
+#ifdef __IDA__
 #include <prodir.h>
+#endif
 
 #include <stdio.h>
 #include <sys/stat.h>
@@ -49,7 +51,7 @@ Boolean isDir( const char *str )
 {
 #ifdef __NT__
   DWORD a = GetFileAttributes(str);
-  return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0
+  return a != (DWORD)INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0
         ? True
         : False;
 #else
