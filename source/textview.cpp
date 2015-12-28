@@ -35,7 +35,7 @@ int TV_CDECL TTextDevice::overflow( int c )
 {
     if( c != EOF )
         {
-        char b = c;
+        char b = (char)c;
         do_sputn( &b, 1 );
         }
     return 1;
@@ -79,7 +79,7 @@ void TTerminal::bufInc( size_t& val )
 
 Boolean TTerminal::canInsert( size_t amount )
 {
-    long T = (queFront < queBack) ?
+    ssize_t T = (queFront < queBack) ?
         ( queFront +  amount ) :
         ( long(queFront) - bufSize + amount);   // cast needed so we get
                                                 // signed comparison
@@ -88,13 +88,13 @@ Boolean TTerminal::canInsert( size_t amount )
 
 void TTerminal::draw()
 {
-    short  i;
+    ssize_t  i;
     size_t begLine, endLine;
     char s[maxViewWidth+1];
-    size_t bottomLine;
+    ulong bottomLine;
 
-    bottomLine = size.y + delta.y;
-    if( (size_t)limit.y > bottomLine )
+    bottomLine = ulong(size.y + delta.y);
+    if( limit.y > bottomLine )
         {
         endLine = prevLines( queFront, limit.y - bottomLine );
         bufDec( endLine );
@@ -107,7 +107,7 @@ void TTerminal::draw()
     else
         {
         for( i = limit.y; i <= size.y - 1; i++ )
-            writeChar(0, i, ' ', 1, size.x);
+            writeChar(0, ushort(i), ' ', 1, ushort(size.x));
         i =  limit.y -  1;
         }
 
@@ -141,10 +141,10 @@ void TTerminal::draw()
             qstrncpy( s, &s[delta.x], sizeof(s) );
 
         s[maxViewWidth-1] = EOS;
-        writeStr( 0, i, s, 1 );
+        writeStr( 0, ushort(i), s, 1 );
         const size_t sl=strlen(s);
         if (sl < (size_t)size.x) // bugfix JS
-          writeChar( sl, i, ' ', 1, /*size.x*/ size.x-sl  );
+          writeChar( ushort(sl), ushort(i), ' ', 1, /*size.x*/ ushort(size.x-sl)  );
         endLine = begLine;
         bufDec( endLine );
         }
@@ -164,7 +164,7 @@ size_t TTerminal::nextLine( size_t pos )
 
 int TTerminal::do_sputn( const char *s, int count )
 {
-    ushort screenLines = limit.y;
+    size_t screenLines = limit.y;
     size_t i;
     for( i = 0; i < (size_t)count; i++ )
         if( s[i] == '\n' )
@@ -189,14 +189,14 @@ int TTerminal::do_sputn( const char *s, int count )
         queFront += count;
         }
 
-    setLimit( limit.x, screenLines );
-    scrollTo( 0, screenLines + 1 );
+    setLimit( limit.x, ushort(screenLines) );
+    scrollTo( 0, ushort(screenLines + 1) );
     i = prevLines( queFront, 1 );
     if( i <= queFront )
         i = queFront - i;
     else
         i = bufSize - (i - queFront);
-    setCursor( i, screenLines - delta.y - 1 );
+    setCursor( ushort(i), ushort(screenLines - delta.y - 1) );
     drawView();
     return count;
 }
@@ -215,7 +215,7 @@ otstream::otstream( TTerminal *tt)
 otstream& otstream::operator<<(char const *str)
 {
 
-  if ( str != NULL ) tty->do_sputn(str, strlen(str));
+  if ( str != NULL ) tty->do_sputn(str, (ulong)strlen(str));
   return(*this);
 }
 

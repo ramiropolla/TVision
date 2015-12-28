@@ -1,4 +1,4 @@
-/* $Id: linuxx.cpp,v 1.13 2005/06/06 06:49:54 jeremy Exp $ */
+/* $Id: //depot/ida/tvision/source/linuxx.cpp#5 $ */
 /*
  * system.cc
  *
@@ -31,7 +31,7 @@
 /* Modified by Ilfak Guilfanov, <ig@datarescue.com> */
 /* Modified by Jeremy Cooper, <jeremy@baymoo.org> */
 
-#ifdef __LINUX__
+#if defined(__LINUX__) || defined(__MAC__)
 #define Uses_TButton
 #define Uses_TColorSelector
 #define Uses_TDeskTop
@@ -49,6 +49,7 @@
 #define Uses_TScreen
 #define Uses_TScrollBar
 #define Uses_TStatusLine
+#define Uses_TThreaded
 #define Uses_TProgram
 #include <tv.h>
 
@@ -61,21 +62,54 @@
 #include <termios.h>
 #include <errno.h>
 
+#include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xresource.h>
 #include <X11/keysym.h>
+
+#define ADVANCED_CLIPBOARD 1
+
+//
+// Description of an X11 color string update block as determined by the
+// screen update engine.
+//
+typedef struct {
+  enum { UPD_NONE, UPD_UPDATE, UPD_REDUNDANT };
+  char *characters;
+  uint16 len;
+  uint16 x;
+  uint8 state;
+  uint8 color;
+} UpdateBlock;
+
+
+static void writeRow(int dst, ushort *src, int len, bool isExpose);
+static Bool findSelectionNotifyEvent(Display *d, XEvent *e, XPointer arg);
 
 static Display *x_disp;
 static Window x_win;
 static GC *characterGC;
 static GC cursorGC;
 static int x_disp_fd;
+//
+// The last X Event received.
+//
+static XEvent xEvent;
+
+#ifdef ADVANCED_CLIPBOARD
+//
+// The atom we use for receiving clipboard contents.
+//
+static Atom clipboardAtom;
+static Atom XA_CLIPBOARD;
+static char *clipboardBuffer;
+static int clipboardSize;
+#endif
 
 static bool inited = false;
 
 static int lastMods;
-static int current_color;
 static Time last_release_time;
 static int last_release_button;
 static int keyboardModifierState;
@@ -290,6 +324,9 @@ ushort TScreen::screenMode;
 int TScreen::screenWidth;
 int TScreen::screenHeight;
 ushort *TScreen::screenBuffer;
+static ushort *currentScreenBuffer;
+static char *currentChunkBuf;
+static UpdateBlock *currentUpdateBlocks;
 
 static TEvent *evIn;            /* message queue system */
 static TEvent *evOut;
@@ -378,9 +415,9 @@ handleXExpose(XEvent *event)
         /*
          * Something in this row is exposed, just draw the whole row.
          */
-        TScreen::writeRow(row * TScreen::screenWidth,
-                          &TScreen::screenBuffer[row * TScreen::screenWidth],
-                          TScreen::screenWidth);
+        writeRow(row * TScreen::screenWidth,
+                 &TScreen::screenBuffer[row * TScreen::screenWidth],
+                 TScreen::screenWidth, true);
       }
     }
 
@@ -854,7 +891,6 @@ setupKeyTables()
 static void
 get_key_mouse_event(TEvent &event)
 {
-  XEvent xEvent;
   int num_events;
   int button;
 
@@ -1039,13 +1075,92 @@ get_key_mouse_event(TEvent &event)
     case MappingNotify:
       XRefreshKeyboardMapping(&xEvent.xmapping);
       break;
+#ifdef ADVANCED_CLIPBOARD
+    case SelectionClear:
+      //
+      // Another application has posted something to the clipboard.
+      // We are no longer the clipboard source.
+      // There's really nothing to do.
+      //
+      break;
+    case SelectionRequest: {
+      //
+      // We're in charge of the clipboard and another application has requested
+      // its contents.
+      //
+      XEvent reply;
+      
+      LOG("Got selection request.");
+      
+      //
+      // We must have something on the internal clipboard and the requestor
+      // must ask for the data as a string.
+      //
+      if (clipboardSize > 0 && xEvent.xselectionrequest.target == XA_STRING) {
+        //
+        // The requestor has asked for the data as a string.
+        // Send it the data by attaching it to the specified property on the
+        // specified window.
+        //
+        XChangeProperty(
+          x_disp,
+          xEvent.xselectionrequest.requestor,
+          xEvent.xselectionrequest.property,
+          XA_STRING,
+          8, // Format.  8 = 8-bit character array
+          PropModeReplace,
+          (unsigned char *) clipboardBuffer,
+          clipboardSize
+        );
+        
+        //
+        // Set up the reply to indicate that the transfer succeeded.
+        //
+        reply.xselection.property = xEvent.xselectionrequest.property;
+      } else {
+        //
+        // Couldn't satisfy the request.
+        // Set up the reply to indicate that the transfer failed.
+        //
+        reply.xselection.property = None;
+      }
+      //
+      // Notify the requestor that the transfer has completed.
+      //
+      reply.type = SelectionNotify;
+      reply.xselection.display = x_disp;
+      reply.xselection.requestor = xEvent.xselectionrequest.requestor;
+      reply.xselection.selection = xEvent.xselectionrequest.selection;
+      reply.xselection.target = xEvent.xselectionrequest.target;
+      reply.xselection.time = xEvent.xselectionrequest.time;
+      XSendEvent(x_disp, xEvent.xselectionrequest.requestor, False, 0, &reply);
+      }
+      break;
+#endif // ADVANCED_CLIPBOARD
     case ConfigureNotify:
-      TScreen::screenWidth = range(xEvent.xconfigure.width / fontWidth,4, maxViewWidth);
-      TScreen::screenHeight = range(xEvent.xconfigure.height / fontHeight,
-        4, 100);
+      int width, height;
+      
+      width = range(xEvent.xconfigure.width / fontWidth,4, maxViewWidth);
+      height = range(xEvent.xconfigure.height / fontHeight, 4, 100);
+      
+      if (TScreen::screenWidth == width && TScreen::screenHeight == height)
+        //
+        // Screen size hasn't changed.  Ignore.
+        //
+        break;
+        
+      TScreen::screenWidth = width;
+      TScreen::screenHeight = height;
       delete[] TScreen::screenBuffer;
-      TScreen::screenBuffer = new ushort[
-        TScreen::screenWidth * TScreen::screenHeight];
+      delete[] currentScreenBuffer;
+      delete[] currentUpdateBlocks;
+      delete[] currentChunkBuf;
+      int totalSize = TScreen::screenWidth * TScreen::screenHeight;
+      TScreen::screenBuffer = new ushort[totalSize];
+      currentScreenBuffer = new ushort[totalSize];
+      currentUpdateBlocks = new UpdateBlock[TScreen::screenWidth];
+      currentChunkBuf = new char[TScreen::screenWidth];
+      memset(currentScreenBuffer, sizeof(short) * totalSize, 0);
       LOG("screen resized to %dx%d", TScreen::screenWidth,
         TScreen::screenHeight);
       TScreen::drawCursor(0); /* hide the cursor */
@@ -1075,20 +1190,20 @@ max(int a, int b)
 
 static int confirmExit()
 {
-        /* we need the buffer address */
+  /* we need the buffer address */
 
-        class MyBuffer: public TDrawBuffer
-        {
-        public:
-                ushort *getBufAddr() { return data; }
-        };
-        MyBuffer b;
-        static char msg[] = "Warning: are you sure you want to quit ?";
+  class MyBuffer: public TDrawBuffer
+  {
+  public:
+          ushort *getBufAddr() { return data; }
+  };
+  MyBuffer b;
+  static char msg[] = "Warning: are you sure you want to quit ?";
 
-        b.moveChar(0, ' ', 0x4f, TScreen::screenWidth);
-        b.moveStr(max((TScreen::screenWidth - (int) (sizeof(msg) - 1)) / 2,
-                0), msg, 0x4f);
-        TScreen::writeRow(0, b.getBufAddr(), TScreen::screenWidth);
+  b.moveChar(0, ' ', 0x4f, TScreen::screenWidth);
+  b.moveStr(max((TScreen::screenWidth - (int) (sizeof(msg) - 1)) / 2,
+          0), msg, 0x4f);
+  writeRow(0, b.getBufAddr(), TScreen::screenWidth, false);
 
 	for (;;) {
 		char xlat[20];
@@ -1121,14 +1236,20 @@ static int confirmExit()
 
 static void freeResources()
 {
-        delete[] TScreen::screenBuffer;
-
+  delete[] TScreen::screenBuffer;
+  delete[] currentScreenBuffer;
+  delete[] currentUpdateBlocks;
+  delete[] currentChunkBuf;
+#ifdef ADVANCED_CLIPBOARD
+  free(clipboardBuffer);
+#endif
+  
 	KeyboardXlatHash_free(plainKeyTable);
 	KeyboardXlatHash_free(shiftKeyTable);
 	KeyboardXlatHash_free(ctrlKeyTable);
 	KeyboardXlatHash_free(altKeyTable);
 
-        LOG("terminated");
+  LOG("terminated");
 }
 
 /*
@@ -1326,6 +1447,19 @@ TScreen::TScreen()
 	if (x_disp == NULL)
 		error("Couldn't open display '%s'.\n", p);
 
+#ifdef ADVANCED_CLIPBOARD
+  /*
+   * "Intern" an atom that we can use as a target identifier when
+   * asking X for the clipboard contents.
+   */
+  clipboardAtom = XInternAtom(x_disp, "TVISION_CLIPBOARD", False);
+  if (clipboardAtom == None)
+    error("Couldn't intern clipboard atom.\n");
+  XA_CLIPBOARD = XInternAtom(x_disp, "CLIPBOARD", False);
+  if (clipboardAtom == None)
+    error("Couldn't intern clipboard selection atom.\n");  
+#endif
+
 	/*
 	 * Read in X resource overrides.
 	 */
@@ -1455,8 +1589,8 @@ TScreen::TScreen()
 	XChangeWindowAttributes(x_disp, x_win,
 		CWBitGravity|CWBackingStore|CWEventMask, &wa);
 
-        screenWidth = sh->width / fontWidth;
-        screenHeight = sh->height / fontHeight;
+  screenWidth = sh->width / fontWidth;
+  screenHeight = sh->height / fontHeight;
 
 	XFree(wmh);
 	XFree(clh);
@@ -1469,24 +1603,22 @@ TScreen::TScreen()
 	setupGCs(x_disp, x_win, fid);
 
 	/*
-	 * Setup the events we're interested in receiving.
-	 */
-#if 0
-	XSelectInput(x_disp, x_win, ExposureMask|KeyPressMask|ButtonPressMask|
-	                            ButtonReleaseMask|ButtonMotionMask|
-	                            KeymapStateMask|ExposureMask|
-				    StructureNotifyMask);
-#endif
-
-	/*
 	 * Cause the window to be displayed.
 	 */
 	XMapWindow(x_disp, x_win);
 
-        LOG("screen size is %dx%d", screenWidth, screenHeight);
-        screenBuffer = new ushort[screenWidth * screenHeight];
+  LOG("screen size is %dx%d", screenWidth, screenHeight);
+  TScreen::screenBuffer = new ushort[screenWidth * screenHeight];
+  currentScreenBuffer = new ushort[screenWidth * screenHeight];
+  currentUpdateBlocks = new UpdateBlock[screenWidth];
+  currentChunkBuf = new char[screenWidth];
+#ifdef ADVANCED_CLIPBOARD
+  clipboardBuffer = NULL;
+  clipboardSize = 0;
+#endif
+  
+  /* internal stuff */
 
-        /* internal stuff */
 	expose_region = XCreateRegion();
 
 	/* Setup keyboard translations */
@@ -1497,36 +1629,36 @@ TScreen::TScreen()
 
 	x_disp_fd = ConnectionNumber(x_disp);
 
-        curX = curY = 0;
-        cursor_displayed = true;
-        currentTime = doRepaint = evLength = 0;
-        evIn = evOut = &evQueue[0];
-        msAutoTimer.stop();
-        msOldButtons = 0;
-        wakeupTimer.start(DELAY_WAKEUP);
+  curX = curY = 0;
+  cursor_displayed = true;
+  currentTime = doRepaint = evLength = 0;
+  evIn = evOut = &evQueue[0];
+  msAutoTimer.stop();
+  msOldButtons = 0;
+  wakeupTimer.start(DELAY_WAKEUP);
 
-        /* catch useful signals */
+  /* catch useful signals */
 
-        struct sigaction dfl_handler;
+  struct sigaction dfl_handler;
 
-        dfl_handler.sa_handler = sigHandler;
-        sigemptyset(&dfl_handler.sa_mask);
-        dfl_handler.sa_flags = SA_RESTART;
+  dfl_handler.sa_handler = sigHandler;
+  sigemptyset(&dfl_handler.sa_mask);
+  dfl_handler.sa_flags = SA_RESTART;
 
-        sigaction(SIGALRM, &dfl_handler, NULL);
-        sigaction(SIGCONT, &dfl_handler, NULL);
-        sigaction(SIGINT, &dfl_handler, NULL);
-        sigaction(SIGQUIT, &dfl_handler, NULL);
-        sigaction(SIGTSTP, &dfl_handler, NULL);
-        sigaction(SIGWINCH, &dfl_handler, NULL);
+  sigaction(SIGALRM, &dfl_handler, NULL);
+  sigaction(SIGCONT, &dfl_handler, NULL);
+  sigaction(SIGINT, &dfl_handler, NULL);
+  sigaction(SIGQUIT, &dfl_handler, NULL);
+  sigaction(SIGTSTP, &dfl_handler, NULL);
+  sigaction(SIGWINCH, &dfl_handler, NULL);
 
-        /* generates a SIGALRM signal every DELAY_SIGALRM ms */
+  /* generates a SIGALRM signal every DELAY_SIGALRM ms */
 
-        struct itimerval timer;
-        timer.it_interval.tv_usec = timer.it_value.tv_usec =
-                DELAY_SIGALRM * 1000;
-        timer.it_interval.tv_sec = timer.it_value.tv_sec = 0;
-        setitimer(ITIMER_REAL, &timer, NULL);
+  struct itimerval timer;
+  timer.it_interval.tv_usec = timer.it_value.tv_usec =
+          DELAY_SIGALRM * 1000;
+  timer.it_interval.tv_sec = timer.it_value.tv_sec = 0;
+  setitimer(ITIMER_REAL, &timer, NULL);
 }
 
 /*
@@ -1707,70 +1839,222 @@ void TScreen::moveCursor(int x, int y)
 /*
  * Draws a line of text on the screen.
  */
-
 void TScreen::writeRow(int dst, ushort *src, int len)
 {
-  int x, y, code, color, current_color;
-  char chunkBuf[1024]; // Holds strings of characters that can be drawn
-                       // with the same attribute.
-  char *chunk_p;
+  ::writeRow(dst, src, len, false);
+}
 
+/*
+ * Updates the X display with new text.
+ */
+static void
+writeRow(int dst, ushort *src, int len, bool isExpose)
+{
+  int x, y, i, j, endblock;
+  char *chunk_p;
+  ushort *src_p, *cache_p;
+
+  //
+  // If this isn't a forced update, it may be possible to skip this update
+  // completely if it is redundant.
+  //
+  if (!isExpose) {
+    //
+    // This is not a forced update, but rather a signal from further inside
+    // the TVision library that something may have changed in this row
+    // on the screen.
+    //
+    // TVision sends many unecessary redraws, so we can take this opportunity
+    // to skip the operation if the current screen buffer already contains
+    // the characters being drawn.
+    //
+    if (memcmp(src, &currentScreenBuffer[dst], len * sizeof(ushort)) == 0)
+      return;
+  }
+
+  //
+  // Gather up a list of update blocks for the current row, taking into
+  // account what is already on the screen.
+  //
+  endblock = 0;
+  chunk_p = currentChunkBuf;
+  cache_p = &currentScreenBuffer[dst];
+  src_p = src;
+  currentUpdateBlocks[endblock].state = UpdateBlock::UPD_NONE;
+  
+  for (i = len; i > 0; src_p++, cache_p++, chunk_p++, i--) {
+    int color = (*src_p & 0xff00) >> 8; // color code
+    int code = *src_p & 0xff;           // character code
+    int ccolor = (*cache_p & 0xff00) >> 8; // cached color code
+    int ccode = *cache_p & 0xff;           // cached character code
+
+    //
+    // Determine if a new update block needs to be created.
+    //
+    if (color == ccolor && code == ccode && !isExpose) {
+      //
+      // Current character is already on the screen.
+      //
+      if (currentUpdateBlocks[endblock].state != UpdateBlock::UPD_REDUNDANT ||
+          currentUpdateBlocks[endblock].color != color) {
+        //
+        // Start a new redundant block.
+        //
+        if (currentUpdateBlocks[endblock].state != UpdateBlock::UPD_NONE)
+          endblock++;
+        currentUpdateBlocks[endblock].state = UpdateBlock::UPD_REDUNDANT;
+        currentUpdateBlocks[endblock].color = color;
+        currentUpdateBlocks[endblock].characters = chunk_p;
+        currentUpdateBlocks[endblock].len = 0;
+      }
+    } else {
+      //
+      // Current character is not already on the screen.
+      //
+      if (currentUpdateBlocks[endblock].state != UpdateBlock::UPD_UPDATE ||
+          currentUpdateBlocks[endblock].color != color) {
+        //
+        // Start a new update block.
+        //
+        if (currentUpdateBlocks[endblock].state != UpdateBlock::UPD_NONE)
+          endblock++;
+        currentUpdateBlocks[endblock].state = UpdateBlock::UPD_UPDATE;
+        currentUpdateBlocks[endblock].color = color;
+        currentUpdateBlocks[endblock].characters = chunk_p;
+        currentUpdateBlocks[endblock].len = 0;
+      }
+    }
+    
+    //
+    // Add this character to the current block.
+    //
+    currentUpdateBlocks[endblock].len++;
+    *chunk_p = code;
+  }
+
+  if (currentUpdateBlocks[0].state == UpdateBlock::UPD_NONE) {
+    //
+    // There's nothing to do.
+    //
+    return;
+  }
+  
+  //
+  // Now collapse update blocks into an efficient form.
+  //
+  // This algorithm takes into account the network cost of an
+  // XDrawImageString request (known as an ImageText8 request in the
+  // X11 protocol specification).
+  //
+  // If two draw image requests can be collapsed into a single request
+  // of smaller size, it will do so.
+  //
+  
+  // The size of an ImageText8 message header.
+  //
+  //  ImageText8
+  //             drawable: DRAWABLE
+  //             gc: GCONTEXT
+  //             x, y: INT16
+  //             string: STRING8
+  //
+  static const int IMAGETEXT8_SIZE = 1 + 4 + 4 + 2 + 2 + 4; 
+
+  //
+  // Compute the current screen x and y position.
+  //
   x = dst % TScreen::screenWidth;
   y = dst / TScreen::screenWidth;
 
-  while (len > 0) {
-    current_color = (*src & 0xff00) >> 8;
-    chunk_p = chunkBuf;
-
+  for (i = 0; i <= endblock; i++) {
     //
-    // Gather up the longest run of characters from the current position
-    // that have the same attribute. 
+    // Skip any leading redundant blocks.
     //
-    do {
-      color = (*src & 0xff00) >> 8; /* color code */
-      code = *src & 0xff;           /* character code */
+    if (currentUpdateBlocks[i].state == UpdateBlock::UPD_REDUNDANT) {
+#ifdef DEBUG_OPTIMIZATION
+      LOG("Skipping %d redundant at (%d, %d) color %02x.",
+             currentUpdateBlocks[i].len, y, x, currentUpdateBlocks[i].color);
+#endif
+      x += currentUpdateBlocks[i].len;
+      continue;
+    }
     
-      if (color == current_color ||
-          // If printing a space character, only the background color need
-          // match.
-          (code == 0x20 && (color & 0xf0) == (current_color & 0xf0))) {
-        *(chunk_p++) = code;
-        src++;
-      } else if (code == 0xdb &&
-                 (color & 0x0F) == ((current_color & 0xf0) >> 4)) {
-        // If printing a solid block character and its foreground matches the
-        // current background, print a space.
-        *(chunk_p++) = ' ';
-        src++;
-      } else {
-        // Color changed.  Stop collecting characters and proceed to drawing
-        // what we have.
+    //
+    // We've got an update block.  See if it can be expanded.
+    //
+    while ((i + 2 <= endblock) &&
+        currentUpdateBlocks[i + 1].state == UpdateBlock::UPD_REDUNDANT &&
+        currentUpdateBlocks[i + 1].color == currentUpdateBlocks[i].color &&
+        currentUpdateBlocks[i + 2].state == UpdateBlock::UPD_UPDATE &&
+        currentUpdateBlocks[i + 2].color == currentUpdateBlocks[i].color) {
+      //
+      // We've found a possible group to collapse.
+      // Is it worth it?
+      //
+      if (currentUpdateBlocks[i + 1].len <= IMAGETEXT8_SIZE) {
+        //
+        // The collapse is worth it.
+        // Do it.
+        //
+#ifdef DEBUG_OPTIMIZATION
+        LOG("Collapsing %d:%d:%d color %02x run.",
+          currentUpdateBlocks[i].len,
+          currentUpdateBlocks[i + 1].len,
+          currentUpdateBlocks[i + 2].len,
+          currentUpdateBlocks[i].color);
+#endif
+        currentUpdateBlocks[i].len += currentUpdateBlocks[i + 1].len;
+        currentUpdateBlocks[i].len += currentUpdateBlocks[i + 2].len;
+        for (j = i + 1; (j + 2) <= endblock; j++)
+          currentUpdateBlocks[j] = currentUpdateBlocks[j + 2];
+        endblock -= 2;
+        
+        //
+        // See if we can collapse some more.
+        //
+        continue;
+      } else
         break;
-      }
-    } while (--len > 0);
+    }
 
-    // We've gathered the largest block of characters with the same
-    // attributes that we can.  Now draw them.
-    XDrawImageString(x_disp, x_win, characterGC[current_color],
-                     x * fontWidth, y * fontHeight + fontAscent,
-                     chunkBuf, chunk_p - chunkBuf);
+    //
+    // Draw the current block.
+    //
+    XDrawImageString(
+      x_disp,
+      x_win,
+      characterGC[currentUpdateBlocks[i].color],
+      x * fontWidth,
+      y * fontHeight + fontAscent,
+      currentUpdateBlocks[i].characters,
+      currentUpdateBlocks[i].len
+    );
+    
+#ifdef DEBUG_OPTIMIZATION
+    XFlush(x_disp);
+
+    LOG("Wrote %d characters at (%d, %d) color %02x.",
+      currentUpdateBlocks[i].len, y, x, currentUpdateBlocks[i].color);
+#endif
+
     //
     // If the cursor is on and we've just drawn over it, redisplay it.
     //
     if (cursor_displayed &&
         curY == y &&
-        curX >= x && curX < (x + (chunk_p - chunkBuf)))
+        curX >= x && curX < (x + currentUpdateBlocks[i].len))
       drawTextCursor();
 
-#ifdef DEBUG_X
-    XFlush(x_disp);
-#endif
-
-    x += chunk_p - chunkBuf;
+    x += currentUpdateBlocks[i].len;
   }
-}
-// x_disp, x_win, colorGC, fontWidth, fontHeight, fontAscent
 
+  
+  if (!isExpose)
+    //
+    // Update the current screen buffer cache.
+    //
+    memcpy(&currentScreenBuffer[dst], src, len * sizeof(ushort));
+}
 
 /*
  * Expands a path into its directory and file components.
@@ -1812,22 +2096,22 @@ void TEventQueue::mouseInt() { /* no mouse... */ }
 
 void THWMouse::resume()
 {
-  LOG("RESUME MOUSE\n");
+  LOG("RESUME MOUSE");
 }
 
 void THWMouse::suspend()
 {
-  LOG("SUSPEND MOUSE\n");
+  LOG("SUSPEND MOUSE");
 }
 
 void TV_CDECL THWMouse::show()
 {
-  LOG("SHOW MOUSE\n");
+  LOG("SHOW MOUSE");
 }
 
 void TV_CDECL THWMouse::hide()
 {
-  LOG("HIDE MOUSE\n");
+  LOG("HIDE MOUSE");
 }
 
 bool TProgram::switch_screen(int to_user)
@@ -1846,4 +2130,322 @@ void TProgram::at_child_exec(bool before)
   //
 }
 
-#endif // __LINUX__
+//
+// Get the contents of the system clipboard.
+//
+char *
+TThreads::clipboard_get(size_t &sz, bool line)
+{
+  char *answer = NULL, *data, *clip;
+  bool xfree = false;
+  size_t clsz;
+#ifdef ADVANCED_CLIPBOARD
+  Window currentOwner;
+  int r;
+  
+  //
+  // See who is the current selection owner.
+  //
+  currentOwner = XGetSelectionOwner(x_disp, XA_CLIPBOARD);
+  
+  if (currentOwner == None) {
+    //
+    // No one has posted anything to the clipboard.
+    //
+    goto fail;
+  } else if (currentOwner == x_win) {
+    //
+    // We're the current selection owner.
+    // Bypass the normal X11 query protocol and use what is on our
+    // internal clipboard.
+    //
+    clsz = clipboardSize;
+    data = clipboardBuffer;
+    LOG("Using internal clipboard data, size %d.", clsz);
+  } else {
+    //
+    // Someone else owns the current selection.
+    // Ask them to convert the current selection to an XA_STRING.
+    //    
+    r = XConvertSelection(x_disp, XA_CLIPBOARD, XA_STRING, clipboardAtom,
+                          x_win, CurrentTime);
+    if (r == BadAtom || r == BadWindow) {
+      LOG("ConvertSelection failed (%d).", r);
+      goto fail;
+    }
+      
+    
+    //
+    // Await a response from the selection owner, notifying us that the
+    // selection transfer has been completed.
+    //
+    XEvent responseEvent;
+      
+    //
+    // Pull the next SelectionNotify event out of the event queue, waiting
+    // for one to arrive if none are currently available, and leaving all
+    // other queued events undisturbed.
+    //
+    r = XIfEvent(x_disp, &responseEvent, findSelectionNotifyEvent, NULL);
+    if (r != Success) {
+      LOG("Wait for selectionNotify failed.");
+      goto fail;
+    }
+    
+    //
+    // The filter function should have ensured that the only event we receive
+    // is a SelectionNotify event, but double check just to make sure.
+    //
+    if (responseEvent.type != SelectionNotify) {
+      LOG("Expected selection notify, got %d.", responseEvent.type);
+      goto fail;
+    }
+
+    //
+    // Did the sender indicate a successful transfer?
+    //
+    if (responseEvent.xselection.property == None) {
+      LOG("Responder says transfer failed.");
+      goto fail;
+    }
+    
+    //
+    // Query our window (which we designated as the receipient of the
+    // transfer when we made the selection request) for the property
+    // to which we asked the sender to write the results.
+    //
+    Atom actual_type_atom;
+    int actual_format;
+    unsigned long bytes_returned, bytes_remaining;
+    
+    r = XGetWindowProperty(x_disp, x_win, clipboardAtom, 0, 1024 * 1024, False,
+                           XA_STRING, &actual_type_atom, &actual_format,
+                           &bytes_returned, &bytes_remaining,
+                           (unsigned char **)&data);
+    if (r != Success) {
+      LOG("Couldn't get window property.");
+      goto fail;
+    }
+
+    if (bytes_remaining > 0)
+      //
+      // Wow.  There are more bytes in the clipboard than the insane amount
+      // that we requested.  The clipboard text will truncated.
+      // Log a warning.
+      //
+      warning("Dropped %d bytes from clipboard transfer.", bytes_remaining);
+    
+    clsz = bytes_returned;
+    xfree = true;
+  }
+#else 
+  int bytes_returned;
+  
+  data = XFetchBytes(x_disp, &bytes_returned);
+  if (data == NULL) {
+    warning("XFetchBytes failed.\n");
+    goto fail;
+  }
+  LOG("XFetchBytes ok: %p, %d.", data, bytes_returned);
+  xfree = true;
+  clsz = bytes_returned;
+#endif
+
+  //
+  // This code stolen from the Windows NT TVision clipboard code.
+  // It appears to filter out unwanted characters.
+  //
+  if (clsz != 0) {
+    //
+    // Is there more available than the caller is willing to accept?
+    //
+    if (sz < clsz)
+      //
+      // We've got more than the caller wants.  Truncate.
+      //
+      clsz = sz;
+    
+    int allocsz = clsz;
+    
+    //
+    // If this is a multi-line retreival, scan the string for newlines not
+    // preceeded by a carriage return.  These "UNIX" convention newlines will
+    // not be interpreted correctly by TVision unless they are preceeded by
+    // carriage returns, so we must insert them ourselves.  We need to know
+    // how many we are going to insert so that we can allocate a proper buffer.
+    //
+    if (line) {
+      int newlines, i;
+      bool cr;
+      
+      for (i = newlines = 0, cr = false; i < clsz; i++) {
+        if (data[i] == '\r') {
+          cr = true;
+        } else {
+          if (data[i] == '\n')
+            if (cr == false)
+              newlines++;
+          cr = false;
+        }
+      }
+      allocsz += newlines;
+    }
+    
+    //
+    // Allocate a buffer to return to the caller.
+    //
+    answer = (char *)malloc(allocsz);
+
+    //
+    // Copy characters into the buffer, trimming unprintables and
+    // mapping newline and carriage returns into spaces, if needed.
+    //
+    if (answer != NULL) {
+      char *dst = answer;
+      char *src = data;
+      bool cr = false;
+      
+      while (*src != '\0' && clsz > 0) {
+        char c = *src++;
+        clsz--;
+        if (c < ' ' || c == 127) {
+          //
+          // Character is non-printable.
+          //
+          if (line && dst == answer)
+            //
+            // We haven't seen any printables yet, so
+            // just skip this character entirely.
+            // (This has the effect of eating leading whitespace).
+            //
+            continue;
+          if (line || (c != '\r' && c != '\n'))
+            //
+            // We've written printable characters already.
+            // Convert this weird character to a space.
+            //
+            c = ' ';
+        }
+        if (c == '\n' && !line && !cr) {
+          //
+          // We need to insert a carriage return in front
+          // of this newline.
+          //
+          *dst++ = '\r';
+        }
+        if (c == '\r')
+          cr = true;
+        else
+          cr = false;
+        *dst++ = c;
+      }
+      if ( line )
+        //
+        // Trim trailing whitespace.
+        //
+        for ( ; dst > answer; --dst )
+          if ( dst[-1] > ' ' )
+            break;
+      
+      //
+      // Is the entire result empty?
+      //
+      if (dst == answer) {
+        free (answer);
+        answer = NULL;
+      } else {
+        *dst = '\0';
+        sz = dst - answer;
+      }
+    }
+  }
+
+  if (xfree)
+    XFree(data);
+
+  return answer;
+  
+fail:
+  sz = 0;
+  return NULL;
+}
+
+//
+// Put data on the system clipboard.
+//
+bool
+TThreads::clipboard_put(const char *str, size_t from, size_t to)
+{
+#ifdef ADVANCED_CLIPBOARD
+  Time theTime;
+  
+  //
+  // We need to figure out what XEvent caused this program to want to
+  // paste something on the clipboard so that we can tell the X server
+  // exactly _when_ we want it on the clipboard.
+  //
+  // We do so by assuming that the last received X event must have caused
+  // this behavior and using that event's timestamp.
+  //
+  switch (xEvent.type) {
+  case ButtonPress:
+  case ButtonRelease:
+    theTime = xEvent.xbutton.time;
+    break;
+  case KeyPress:
+  case KeyRelease:
+    theTime = xEvent.xkey.time;
+    break;
+  default:
+    LOG("Can't paste to clipboard because I can't correlate an X event.");
+    return false;
+  }
+  
+  //
+  // Notify the X server that we want to own the clipboard.
+  //
+  XSetSelectionOwner(x_disp, XA_CLIPBOARD, x_win, theTime);
+  
+  //
+  // See if we managed to gain ownership.
+  //
+  if (XGetSelectionOwner(x_disp, XA_CLIPBOARD) != x_win)
+    //
+    // We failed to acquire the selection.
+    //
+    return false;
+  
+  //
+  // We've got ownership.
+  // Remember the characters that the application wants to send so that we
+  // can send them later, when the server asks for them.
+  //
+  free(clipboardBuffer);
+  clipboardSize = to - from;
+  clipboardBuffer = (char *) malloc(clipboardSize);
+  memcpy(clipboardBuffer, str + from, clipboardSize);
+  LOG("Stored %d bytes on internal clipboard.", clipboardSize);
+  
+  return true;
+#else
+  int r;
+  
+  r = XStoreBytes(x_disp, str + from, to - from);
+  if (r == Success)
+    return true;
+  warning("XStoreBytes failed (%d).\n", r);
+  return false;
+#endif
+}
+
+#ifdef ADVANCED_CLIPBOARD
+static Bool
+findSelectionNotifyEvent(Display *d, XEvent *e, XPointer arg)
+{
+  if (e->type == SelectionNotify)
+    return True;
+  return False;
+}
+#endif // ADVANCED_CLIPBOARD
+
+#endif // __UNIX__

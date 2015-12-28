@@ -99,7 +99,7 @@ void TScroller::scrollDraw()
 
     if( d.x != delta.x || d.y != delta.y )
         {
-        setCursor( cursor.x + delta.x - d.x, cursor.y + delta.y - d.y );
+        setCursor( ushort(cursor.x + delta.x - d.x), ushort(cursor.y + delta.y - d.y) );
         delta = d;
         if( drawLock != 0 )
             drawFlag = True;

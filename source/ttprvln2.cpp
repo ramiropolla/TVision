@@ -29,7 +29,7 @@ size_t TV_CDECL TTerminal::prevLines( size_t pos, int lines ) {
     DECPTR
     while ( 1 ) {
 //loop:
-      int counter;
+      size_t counter;
       if ( ptr <= buffer+queBack )
         counter = ptr - buffer;
       else

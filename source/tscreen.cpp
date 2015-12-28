@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#ifndef __LINUX__
+#ifndef __UNIX__
 #ifdef __MSDOS__
 #include <dos.h>
 ushort *TDisplay::equipment = (ushort *)MK_FP( 0, 0x410 );
@@ -44,7 +44,7 @@ Boolean TScreen::hiResScreen = False;
 Boolean TScreen::checkSnow = False;
 ushort *TScreen::screenBuffer = 0;
 ushort TScreen::cursorLines = 0;
-#endif // !__LINUX__
+#endif // !__UNIX__
 //--------------------------------------------------------------------------
 #ifdef __MSDOS__
 #define maxViewHeight 100
@@ -52,7 +52,7 @@ ushort TScreen::cursorLines = 0;
 #define maxViewHeight 300
 #endif
 
-#ifndef __LINUX__
+#ifndef __UNIX__
 static void checksize(int height, int width)
 {
   if ( height > maxViewHeight )
@@ -66,7 +66,7 @@ static void checksize(int height, int width)
     _exit(0);
   }
 }
-#endif // !__LINUX__
+#endif // !__UNIX__
 
 //--------------------------------------------------------------------------
 
@@ -359,7 +359,7 @@ ushort TDisplay::getCursorType()
    int ct = TThreads::crInfo.bVisible
                 ? TThreads::crInfo.dwSize*31/100
                 : 0x2000;
-   return ct;
+   return ushort(ct);
 }
 
 void TDisplay::setCursorType( ushort ct )
@@ -430,7 +430,7 @@ ushort TDisplay::getCrtMode()
 {
   int rows = getRows();
   if ( rows >= 0xFF ) rows = 0xFF;
-  return rows + (getCols() << 8);
+  return ushort(rows + (getCols() << 8));
 }
 
 void TDisplay::setCrtMode( ushort mode )
@@ -443,8 +443,8 @@ void TDisplay::setCrtMode( ushort mode )
   if ( rows == 0 ) rows = oldr;
 //  if ( oldr == rows && oldc == cols ) return;   // nothing to do
   checksize(rows, cols);
-  COORD newSize = { cols, rows };
-  SMALL_RECT rect = { 0, 0, cols-1, rows-1 };
+  COORD newSize = { SHORT(cols), SHORT(rows) };
+  SMALL_RECT rect = { 0, 0, SHORT(cols-1), SHORT(rows-1) };
 
 #if 1   // it seems that better to check it (25.05.99)
   COORD maxSize = GetLargestConsoleWindowSize( TThreads::chandle[cnOutput] );
@@ -494,7 +494,7 @@ BUFWIN:
     }
     else
     {                           // cols--, rows+
-      SMALL_RECT tmp = { 0, 0, cols-1, oldr-1 };
+      SMALL_RECT tmp = { 0, 0, SHORT(cols-1), SHORT(oldr-1) };
 //      SetLastError(0);
 //      code =
       SetConsoleWindowInfo( TThreads::chandle[cnOutput], True, &tmp );
@@ -506,7 +506,7 @@ BUFWIN:
   {
     if ( oldc < cols )
     {                           // cols+, rows--
-      SMALL_RECT tmp = { 0, 0, oldc-1, rows-1 };
+      SMALL_RECT tmp = { 0, 0, SHORT(oldc-1), SHORT(rows-1) };
 //      SetLastError(0);
 //      code =
       SetConsoleWindowInfo( TThreads::chandle[cnOutput], True, &tmp );
@@ -580,8 +580,8 @@ void TScreen::setCrtData()
   checksize(screenHeight, screenWidth);
   hiResScreen = Boolean(screenHeight > 25);
 
-  short x = screenWidth;
-  short y = screenHeight;
+  short x = (short)screenWidth;
+  short y = (short)screenHeight;
   if( x < maxViewWidth  ) x = maxViewWidth;
   if( y < maxViewHeight ) y = maxViewHeight;   // 512*100*2 = 1024*100 = 102 400
 
@@ -602,7 +602,7 @@ void TScreen::setCrtData()
 #endif  // __NT__
 
 //---------------------------------------------------------------------------
-#ifndef __LINUX__
+#ifndef __UNIX__
 TScreen::TScreen()
 {
 #ifdef __NT__
@@ -627,14 +627,14 @@ void TScreen::clearScreen()
 {
     TDisplay::clearScreen( screenWidth, screenHeight );
 }
-#endif // !__LINUX__
+#endif // !__UNIX__
 
 void TScreen::setVideoMode( ushort mode )
 {
-#ifndef __LINUX__
+#ifndef __UNIX__
     setCrtMode( fixCrtMode( mode ) );
     setCrtData();
-#else  // __LINUX__
+#else  // __UNIX__
    (void)mode;
-#endif // !__LINUX__
+#endif // !__UNIX__
 }

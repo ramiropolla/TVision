@@ -144,7 +144,7 @@ const ushort
 
 //----------------------------------
 // Keyboard macro handler
-class macro_t;
+struct macro_t;
 #define IDCHOTKEY       ((macro_t *)1)
 
 #define MacroStart      kbAltMinus

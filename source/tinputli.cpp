@@ -21,7 +21,7 @@
 #define Uses_TEvent
 #define Uses_opstream
 #define Uses_ipstream
-#ifdef __NT__
+#if defined(__NT__) || defined(__X11__) 
 #define Uses_TThreaded
 #else
 #define Uses_TEditor
@@ -35,7 +35,7 @@ char hotKey( const char *s )
     const char *p;
 
     if( (p = strchr( s, '~' )) != 0 )
-        return toupper(p[1]);
+        return (char)toupper(p[1]);
     else
         return 0;
 }
@@ -83,15 +83,15 @@ void TInputLine::draw()
     int l, r;
     TDrawBuffer b;
 
-    uchar color = (state & sfFocused) ? getColor( 2 ) : getColor( 1 );
+    uchar color = uchar((state & sfFocused) ? getColor( 2 ) : getColor( 1 ));
 
-    b.moveChar( 0, ' ', color, size.x );
+    b.moveChar( 0, ' ', color, ushort(size.x) );
     char buf[MAXSTR];
     qstrncpy( buf, data+firstPos, size.x - 1 );
     b.moveStr( 1, buf, color );
 
     if( canScroll(1) )
-        b.moveChar( size.x-1, rightArrow, getColor(4), 1 );
+        b.moveChar( ushort(size.x-1), rightArrow, getColor(4), 1 );
     if( (state & sfSelected) != 0 )
         {
         if( canScroll(-1) )
@@ -101,10 +101,10 @@ void TInputLine::draw()
         l = qmax( 0, l );
         r = qmin( size.x - 2, r );
         if (l <  r)
-            b.moveChar( l+1, 0, getColor(3), r - l );
+            b.moveChar( ushort(l+1), 0, getColor(3), ushort(r - l) );
         }
-    writeLine( 0, 0, size.x, size.y, b );
-    setCursor( curPos-firstPos+1, 0);
+    writeLine( 0, 0, ushort(size.x), ushort(size.y), b );
+    setCursor( ushort(curPos-firstPos+1), 0);
 }
 
 void TInputLine::getData( void *rec, size_t recsize )
@@ -138,7 +138,7 @@ int TInputLine::mousePos( TEvent& event )
     size_t pos = mouse.x + firstPos - 1;
     pos = qmax( pos, 0 );
     pos = qmin( pos, strlen(data) );
-    return pos;
+    return (int)pos;
 }
 
 void  TInputLine::deleteSelect()
@@ -171,7 +171,7 @@ void TInputLine::adjustSelectBlock()
 
 bool TInputLine::clip_put(void)
 {
-#ifdef __NT__
+#if defined(__NT__) || defined(__X11__) 
     return TThreads::clipboard_put(data, selStart, selEnd);
 #else
     if ( TEditor::clipboard == NULL )
@@ -183,7 +183,7 @@ bool TInputLine::clip_put(void)
 
 char *TInputLine::clip_get(size_t &clipsz)
 {
-#ifdef __NT__
+#if defined(__NT__) || defined(__X11__)
     return TThreads::clipboard_get(clipsz, true);
 #else
     char *answer = NULL;
@@ -311,7 +311,7 @@ void  TInputLine::handleEvent( TEvent& event )
                         curPos =  0;
                         break;
                     case kbEnd:
-                        curPos = strlen(data);
+                        curPos = (int)strlen(data);
                         break;
                     case kbBack:
                         if( curPos > 0 )
@@ -392,7 +392,7 @@ void  TInputLine::handleEvent( TEvent& event )
 			    {
 				/* SS: restore the old value before exit */
 
-				event.keyDown.keyCode = oldKeyCode;
+        event.keyDown.keyCode = (ushort)oldKeyCode;
 				return;
 			    }
                     }
@@ -425,7 +425,7 @@ void TInputLine::selectAll( Boolean enable )
     {
         selStart = 0;
         if( enable )
-            curPos = selEnd = strlen(data);
+            curPos = selEnd = (int)strlen(data);
         else
             curPos = selEnd = 0;
         firstPos = qmax( 0, curPos-size.x+2 );

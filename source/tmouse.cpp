@@ -141,7 +141,7 @@ TMouse::~TMouse()
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 
-#if defined(__NT__) || defined(__OS2__) || defined(__LINUX__)
+#if defined(__NT__) || defined(__OS2__) || defined(__UNIX__)
 
 THWMouse::THWMouse()
 {
@@ -151,7 +151,7 @@ THWMouse::~THWMouse()
 {
 }
 
-#ifndef __LINUX__
+#ifndef __UNIX__
 void THWMouse::suspend()
 {
     if( present() == False ) return;
@@ -191,7 +191,7 @@ TMouse::~TMouse()
 //    hide();
 }
 
-#endif  // __NT__ || __OS2__ || __LINUX__
+#endif  // __NT__ || __OS2__ || __UNIX__
 
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
@@ -253,7 +253,7 @@ void THWMouse::resume()
   if ( noMouse ) return;
   DWORD num;
   GetNumberOfConsoleMouseButtons(&num);
-  buttonCount = num;
+  buttonCount = (uchar)num;
 }
 
 inline void set_conin_mode(void)

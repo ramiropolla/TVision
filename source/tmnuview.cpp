@@ -332,7 +332,7 @@ ushort TMenuView::execute()
 
 TMenuItem *TMenuView::findItem( char ch )
 {
-    ch = toupper(ch);
+    ch = (char)toupper(ch);
     TMenuItem *p = menu->items;
     while( p != 0 )
         {

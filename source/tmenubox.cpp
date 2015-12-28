@@ -31,12 +31,12 @@ static TRect getRect( const TRect& bounds, TMenu *aMenu )
             {
             if( p->name != 0 )
                 {
-                short l = cstrlen(p->name) + 6;
+                short l = short(cstrlen(p->name) + 6);
                 if( p->command == 0 )
                     l += 3;
                 else
                     if( p->param != 0 )
-                        l += cstrlen(p->param) + 2;
+                        l = short(l + cstrlen(p->param) + 2);
                 w = qmax( l, w );
                 }
             h++;
@@ -72,8 +72,8 @@ static ushort cNormal, color;
 void TMenuBox::frameLine( TDrawBuffer& b, short n )
 {
     b.moveBuf( 0, &frameChars[n], cNormal, 2 );
-    b.moveChar( 2, frameChars[n+2], color, size.x - 4 );
-    b.moveBuf( size.x-2, &frameChars[n+3], cNormal, 2 );
+    b.moveChar( 2, frameChars[n+2], color, ushort(size.x - 4) );
+    b.moveBuf( ushort(size.x-2), &frameChars[n+3], cNormal, 2 );
 }
 
 void TMenuBox::draw()
@@ -87,7 +87,7 @@ void TMenuBox::draw()
     short y = 0;
     color =  cNormal;
     frameLine( b, 0 );
-    writeBuf( 0, y++, size.x, 1, b );
+    writeBuf( 0, y++, ushort(size.x), 1, b );
     if( menu != 0 )
         {
         for( TMenuItem *p = menu->items; p != 0; p = p->next )
@@ -107,18 +107,18 @@ void TMenuBox::draw()
                 frameLine( b, 10 );
                 b.moveCStr( 3, p->name, color );
                 if( p->command == 0 )
-                    b.putChar( size.x-4, 16 );
+                    b.putChar( ushort(size.x-4), 16 );
                 else if( p->param != 0 )
-                    b.moveStr( size.x-3-strlen(p->param),
+                    b.moveStr( ushort(size.x-3-strlen(p->param)),
                                p->param,
                                color);
                 }
-            writeBuf( 0, y++, size.x, 1, b );
+            writeBuf( 0, y++, ushort(size.x), 1, b );
             }
         }
     color = cNormal;
     frameLine( b, 5 );
-    writeBuf( 0, y, size.x, 1, b );
+    writeBuf( 0, y, ushort(size.x), 1, b );
 }
 
 TRect TMenuBox::getItemRect( TMenuItem *item )

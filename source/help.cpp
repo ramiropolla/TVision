@@ -78,7 +78,7 @@ THelpViewer::THelpViewer( const TRect& bounds, TScrollBar* aHScrollBar,
 
 THelpViewer::~THelpViewer()
 {
-    save_topic(curtop,selected,delta.x,delta.y);
+    save_topic(curtop,(ushort)selected,delta.x,delta.y);
     delete hFile;
     delete topic;
 }
@@ -100,7 +100,7 @@ void THelpViewer::draw()
     int keyCount;
     ushort normal, keyword, selKeyword, c;
     TPoint keyPoint;
-    uchar keyLength;
+    uchar keyLength = 0;
     int keyRef;
     int nxrefs = topic->getNumCrossRefs();
 
@@ -131,7 +131,7 @@ void THelpViewer::draw()
     }
     for (i = 1; i <= size.y; ++i)
         {
-        b.moveChar(0, ' ', normal, size.x);
+        b.moveChar(0, ' ', normal, ushort(size.x));
         topic->getLine(i + delta.y, line, sizeof(line));
         if ((int)strlen(line) > delta.x)
             {
@@ -154,13 +154,13 @@ void THelpViewer::draw()
             else
                 c = keyword;
             for(j = 0; j < l; ++j)
-                b.putAttribute((keyPoint.x - delta.x + j),c);
+                b.putAttribute(ushort(keyPoint.x - delta.x + j),c);
             if (keyCount < nxrefs)
                 topic->getCrossRef(keyCount++, keyPoint, keyLength, keyRef);
             else
                 keyPoint.y = 0;
             }
-        writeLine(0, i-1, size.x, 1, b);
+        writeLine(0, ushort(i-1), ushort(size.x), 1, b);
         }
 }
 
@@ -193,7 +193,7 @@ void THelpViewer::switchToTopic( int keyRef, const TPoint &d, int s )
 {
     if (topic != 0)
       delete topic;
-    curtop = keyRef;
+    curtop = (ushort)keyRef;
     topic = hFile->getTopic(keyRef);
     topic->setWidth(size.x);
     scrollTo(d.x, d.y);
@@ -209,7 +209,7 @@ void THelpViewer::handleEvent( TEvent& event )
 
     TPoint keyPoint, mouse;
     uchar keyLength;
-    int keyRef;
+    int keyRef = 0;
     int keyCount;
 
 
@@ -249,7 +249,7 @@ HHelp:
                       topic->getCrossRef(selected-1, keyPoint, keyLength, keyRef);
 SwitchSaving:
                       if ( curtop != keyRef ) {
-                        save_topic(curtop,selected,delta.x,delta.y);
+                        save_topic(curtop,(ushort)selected,delta.x,delta.y);
                         TPoint z;
                         z.x = z.y = 0;
                         switchToTopic(keyRef,z,1);

@@ -88,20 +88,20 @@ void TListViewer::draw()
 
     indent = 0;
     if( hScrollBar != 0 )
-        indent = hScrollBar->value;
+        indent = short(hScrollBar->value);
 
-    colWidth = size.x / numCols + 1;
+    colWidth = short(size.x / numCols + 1);
     for( i = 0; i < size.y; i++ )
         {
         for( j = 0; j < numCols; j++ )
             {
             item =  j * size.y + i + topItem;
-            curCol = j * colWidth;
+            curCol = short(j * colWidth);
 
             if( focused == item && on_front && range > 0 )
                 {
                 color = getColor(3);
-                setCursor( curCol + 1, i );
+                setCursor( curCol + 1, short(i) );
                 scOff = 0;
                 }
             else if( item < range && isItemSelected(item) )
@@ -138,7 +138,7 @@ void TListViewer::draw()
 
             b.moveChar( curCol+colWidth-1, char(179), getColor(5), 1 );
             }
-        writeLine( 0, i, size.x, 1, b );
+        writeLine( 0, ushort(i), ushort(size.x), 1, b );
         }
 }
 
@@ -212,7 +212,7 @@ void TListViewer::handleEvent( TEvent& event )
     if( event.what == evMouseDown )
         {
         remove_selection();
-        colWidth = size.x / numCols + 1;
+        colWidth = ushort(size.x / numCols + 1);
         oldItem =  focused;
         mouse = makeLocal( event.mouse.where );
         if (mouseInView(event.mouse.where))

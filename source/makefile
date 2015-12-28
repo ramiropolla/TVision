@@ -4,10 +4,6 @@
 #
 
 #
-#   Set the variable "IDA" to point to the directory where the IDA SDK is
-#   located.  (make IDA=...)
-
-#
 #	Please note that default .CFG files define NO_TV_STREAMS for
 #	TVision w/o streams.
 #
@@ -19,212 +15,232 @@
 #		- use snprintf() function (see msgbox.cpp)
 #
 
-ifndef IDA
-IDA=IDA_variable_not_set/
-endif
-
-include $(IDA)allmake.unx
-
-CCPLUS=g++
-CFLAGS = -D__LINUX__ -I/usr/X11R6/include -I../include -D__NOROW__ -D__RUS__ -D__IDA__ -DNO_TV_STREAMS -I$(IDA)include
+MAC_EXPORT_ALL=1 # export all symbols under MAC OS X
+_CFLAGS = -O -I..\include -D__NOROW__ -D__RUS__ -D__IDA__ -DNO_TV_STREAMS
 				# see tscreen.cpp for the use of __NOROW__
 				# __RUS__ changes some characters to russian
-				#
-# Uncomment to build under Apple's MacOS X.
-#CFLAGS+=-D__MACOSX__ 
 
-OBJS=   prodir$(O)   \
-        colorsel$(O) \
-        drivers$(O)  \
-        edits2$(O)   \
-        editstat$(O) \
-        frmline2$(O) \
-        grp$(O)      \
-        help$(O)     \
-        helpbase$(O) \
-        histlist$(O) \
-        mapcolor$(O) \
-        menu$(O)     \
-        misc$(O)     \
-        msgbox$(O)   \
-        names$(O)    \
-        new$(O)      \
-        newstr$(O)   \
-        os2handl$(O) \
-        palette$(O)  \
-        sall$(O)     \
-        stddlg$(O)   \
-        swapst2$(O)  \
-        syserr$(O)   \
-        tapplica$(O) \
-        tbkgrnd$(O)  \
-        tbutton$(O)  \
-        tchdrdlg$(O) \
-        tcheckbo$(O) \
-        tcluster$(O) \
-        tcmdset$(O)  \
-        tcollect$(O) \
-        tdesktop$(O) \
-        tdialog$(O)  \
-        tdircoll$(O) \
-        tdirlist$(O) \
-        teditor1$(O) \
-        teditor2$(O) \
-        teditwnd$(O) \
-        tevent$(O)   \
-        textview$(O) \
-        tfildlg$(O)  \
-        tfilecol$(O) \
-        tfiledtr$(O) \
-        tfillist$(O) \
-        tframe$(O)   \
-        tgrmv2$(O)   \
-        tgroup$(O)   \
-        thistory$(O) \
-        thistwin$(O) \
-        thstview$(O) \
-        tindictr$(O) \
-        tinputli$(O) \
-        tlabel$(O)   \
-        tlistbox$(O) \
-        tlstview$(O) \
-        tmemo$(O)    \
-        tmenubar$(O) \
-        tmenubox$(O) \
-        tmnuview$(O) \
-        tmouse$(O)   \
-        tobject$(O)  \
-        tobjstrm$(O) \
-        tparamte$(O) \
-        tpoint$(O)   \
-        tprogram$(O) \
-        tradiobu$(O) \
-        trescoll$(O) \
-        tresfile$(O) \
-        tscreen$(O)  \
-        tscrlbar$(O) \
-        tscrolle$(O) \
-        tsortcol$(O) \
-        tstatict$(O) \
-        tstatusl$(O) \
-        tstrcoll$(O) \
-        tstrlist$(O) \
-        ttprvln2$(O) \
-        tvcursr2$(O) \
-        tvexpsd2$(O) \
-        tview$(O)    \
-        tvtext1$(O)  \
-        tvtext2$(O)  \
-        tvwrite2$(O) \
-        twindow$(O)
+!ifndef IDA
+!include ../../../../allmake.mak
+!else
+!include $(IDA)allmake.mak
+!endif
+
+!ifdef __LINUX__
+__UNIX__=1
+!endif
+!ifdef __MAC__
+__UNIX__=1
+INSTALL_NAME=-install_name @executable_path/libtvision$(DLLSUFF)
+!endif
+
+!ifdef __X11__
+_CFLAGS+= -D__X11__
+!endif
+
+OBJS=   $(F)colorsel$(O) \
+        $(F)drivers$(O)  \
+        $(F)edits2$(O)   \
+        $(F)editstat$(O) \
+        $(F)frmline2$(O) \
+        $(F)grp$(O)      \
+        $(F)help$(O)     \
+        $(F)helpbase$(O) \
+        $(F)histlist$(O) \
+        $(F)mapcolor$(O) \
+        $(F)menu$(O)     \
+        $(F)misc$(O)     \
+        $(F)msgbox$(O)   \
+        $(F)names$(O)    \
+        $(F)new$(O)      \
+        $(F)newstr$(O)   \
+        $(F)os2handl$(O) \
+        $(F)palette$(O)  \
+        $(F)sall$(O)     \
+        $(F)stddlg$(O)   \
+        $(F)swapst2$(O)  \
+        $(F)syserr$(O)   \
+        $(F)tapplica$(O) \
+        $(F)tbkgrnd$(O)  \
+        $(F)tbutton$(O)  \
+        $(F)tchdrdlg$(O) \
+        $(F)tcheckbo$(O) \
+        $(F)tcluster$(O) \
+        $(F)tcmdset$(O)  \
+        $(F)tcollect$(O) \
+        $(F)tdesktop$(O) \
+        $(F)tdialog$(O)  \
+        $(F)tdircoll$(O) \
+        $(F)tdirlist$(O) \
+        $(F)teditor1$(O) \
+        $(F)teditor2$(O) \
+        $(F)teditwnd$(O) \
+        $(F)tevent$(O)   \
+        $(F)textview$(O) \
+        $(F)tfildlg$(O)  \
+        $(F)tfilecol$(O) \
+        $(F)tfiledtr$(O) \
+        $(F)tfillist$(O) \
+        $(F)tframe$(O)   \
+        $(F)tgrmv2$(O)   \
+        $(F)tgroup$(O)   \
+        $(F)thistory$(O) \
+        $(F)thistwin$(O) \
+        $(F)thstview$(O) \
+        $(F)tindictr$(O) \
+        $(F)tinputli$(O) \
+        $(F)tlabel$(O)   \
+        $(F)tlistbox$(O) \
+        $(F)tlstview$(O) \
+        $(F)tmemo$(O)    \
+        $(F)tmenubar$(O) \
+        $(F)tmenubox$(O) \
+        $(F)tmnuview$(O) \
+        $(F)tmouse$(O)   \
+        $(F)tobject$(O)  \
+        $(F)tobjstrm$(O) \
+        $(F)tparamte$(O) \
+        $(F)tpoint$(O)   \
+        $(F)tprogram$(O) \
+        $(F)tradiobu$(O) \
+        $(F)trescoll$(O) \
+        $(F)tresfile$(O) \
+        $(F)tscreen$(O)  \
+        $(F)tscrlbar$(O) \
+        $(F)tscrolle$(O) \
+        $(F)tsortcol$(O) \
+        $(F)tstatict$(O) \
+        $(F)tstatusl$(O) \
+        $(F)tstrcoll$(O) \
+        $(F)tstrlist$(O) \
+        $(F)ttprvln2$(O) \
+        $(F)tvcursr2$(O) \
+        $(F)tvexpsd2$(O) \
+        $(F)tview$(O)    \
+        $(F)tvtext1$(O)  \
+        $(F)tvtext2$(O)  \
+        $(F)tvwrite2$(O) \
+        $(F)twindow$(O)
 
 OBJS_XTERM= $(OBJS) linux$(O)
 OBJS_XWIN=  $(OBJS) linuxx$(O)
 
-
+!ifdef __UNIX__
 DL=-ldl
+!ifdef __LINUX__
 EXPORTS_DEF=tvision.script
+!else
+UNDEFS=-undefined dynamic_lookup
+!endif
+all: $(R)libtvision$(DLLSUFF) $(R)libtvisionx$(DLLSUFF)
+$(R)libtvision$(DLLSUFF): $(OBJS_XTERM) $(EXPORTS_DEF)
+	$(CCL) $(OUTDLL) $(OUTSW)$@ $(EXPORTS_DEF) $(OBJS_XTERM) -ldl $(UNDEFS) $(INSTALL_NAME)
+$(R)libtvisionx$(DLLSUFF): $(OBJS_XWIN) $(EXPORTS_DEF)
+	$(CCL) $(OUTDLL) $(OUTSW)$@ $(EXPORTS_DEF) $(OBJS_XWIN) -ldl $(UNDEFS) $(INSTALL_NAME) -L/usr/X11R6/lib -lX11
+!else
+all: objdir tv$(T) $(TL)tv$(A)
+!endif
 
-all: $(R)libtvision.so $(R)libtvisionx.so
+!ifdef __NT__
+hello:	./hello$(B) $(TL)tv$(A)
+!endif
+./hello$(B): tv$(T) $(F)hello$(O)
+	$(CCL) $(OUTSW)$@ $(F)hello$(O) $(OBJS_XTERM) $(L)pro$(A) $(DL)
+./hellox$(B): tv$(T) $(F)hello$(O)
+	$(CCL) $(OUTSW)$@ $(F)hello$(O) $(OBJS_XWIN) $(L)pro$(A) $(DL)
 
-$(R)libtvision.so: $(OBJS_XTERM) $(EXPORTS_DEF)
-	$(CCPLUS) -shared $(OUTSW) $@ $(EXPORTS_DEF) $(OBJS_XTERM) $(DL) --no-undefined $(L)pro$(A)
-$(R)libtvisionx.so: $(OBJS_XWIN) $(EXPORTS_DEF)
-	$(CCPLUS) -shared $(OUTSW) $@ $(EXPORTS_DEF) $(OBJS_XWIN) -lX11 $(DL) --no-undefined \
-	-L/usr/X11R6/lib $(L)pro$(A)
+$(TL)tv$(A) tv$(T): $(OBJS)
+!ifdef TL
+        @if not exist "$(TL)$(CHKDIR)" mkdir $(TL)
+!endif
+	@$(AR) $(TL)tv$(A) $(OBJS)
 
-./hello: hello$(O) $(OBJS_XTERM)
-	$(CCPLUS) $(OUTSW) $@ hello$(O) $(OBJS_XTERM) $(DL)
-
-./hellox: hello$(O) $(OBJS_XWIN)
-	$(CCPLUS) $(OUTSW) $@ hello$(O) $(OBJS_XWIN) -L/usr/X11R6/lib -lX11
-
+!include $(IDA)objdir.mak
 #-----------------------------------------------------------------------
-hello$(O):          hello.cpp
+$(F)hello$(O):          hello.cpp
 
-prodir$(O):         prodir.cpp
-colorsel$(O):       colorsel.cpp
-drivers$(O):        drivers.cpp
-edits2$(O):         edits2.cpp
-editstat$(O):       editstat.cpp
-frmline2$(O):       frmline2.cpp
-grp$(O):            grp.cpp
-help$(O):           help.cpp
-helpbase$(O):       helpbase.cpp
-histlist$(O):       histlist.cpp
-linux$(O):          linux.cpp
-linuxx$(O):         linuxx.cpp
-mapcolor$(O):       mapcolor.cpp
-menu$(O):           menu.cpp
-misc$(O):           misc.cpp
-msgbox$(O):         msgbox.cpp
-names$(O):          names.cpp
-new$(O):            new.cpp
-newstr$(O):         newstr.cpp
-os2handl$(O):       os2handl.cpp
-palette$(O):        palette.cpp
-sall$(O):           sall.cpp
-stddlg$(O):         stddlg.cpp
-swapst2$(O):        swapst2.cpp
-syserr$(O):         syserr.cpp
-tapplica$(O):       tapplica.cpp
-tbkgrnd$(O):        tbkgrnd.cpp
-tbutton$(O):        tbutton.cpp
-tchdrdlg$(O):       tchdrdlg.cpp
-tcheckbo$(O):       tcheckbo.cpp
-tcluster$(O):       tcluster.cpp
-tcmdset$(O):        tcmdset.cpp
-tcollect$(O):       tcollect.cpp
-tdesktop$(O):       tdesktop.cpp
-tdialog$(O):        tdialog.cpp
-tdircoll$(O):       tdircoll.cpp
-tdirlist$(O):       tdirlist.cpp
-teditor1$(O):       teditor1.cpp
-teditor2$(O):       teditor2.cpp
-teditwnd$(O):       teditwnd.cpp
-tevent$(O):         tevent.cpp
-textview$(O):       textview.cpp
-tfildlg$(O):        tfildlg.cpp
-tfilecol$(O):       tfilecol.cpp
-tfiledtr$(O):       tfiledtr.cpp
-tfillist$(O):       tfillist.cpp
-tframe$(O):         tframe.cpp
-tgrmv2$(O):         tgrmv2.cpp
-tgroup$(O):         tgroup.cpp
-thistory$(O):       thistory.cpp
-thistwin$(O):       thistwin.cpp
-thstview$(O):       thstview.cpp
-tindictr$(O):       tindictr.cpp
-tinputli$(O):       tinputli.cpp
-tlabel$(O):         tlabel.cpp
-tlistbox$(O):       tlistbox.cpp
-tlstview$(O):       tlstview.cpp
-tmemo$(O):          tmemo.cpp
-tmenubar$(O):       tmenubar.cpp
-tmenubox$(O):       tmenubox.cpp
-tmnuview$(O):       tmnuview.cpp
-tmouse$(O):         tmouse.cpp
-tobject$(O):        tobject.cpp
-tobjstrm$(O):       tobjstrm.cpp
-tparamte$(O):       tparamte.cpp
-tpoint$(O):         tpoint.cpp
-tprogram$(O):       tprogram.cpp
-tradiobu$(O):       tradiobu.cpp
-trescoll$(O):       trescoll.cpp
-tresfile$(O):       tresfile.cpp
-tscreen$(O):        tscreen.cpp
-tscrlbar$(O):       tscrlbar.cpp
-tscrolle$(O):       tscrolle.cpp
-tsortcol$(O):       tsortcol.cpp
-tstatict$(O):       tstatict.cpp
-tstatusl$(O):       tstatusl.cpp
-tstrcoll$(O):       tstrcoll.cpp
-tstrlist$(O):       tstrlist.cpp
-ttprvln2$(O):       ttprvln2.cpp
-tvcursr2$(O):       tvcursr2.cpp
-tvexpsd2$(O):       tvexpsd2.cpp
-tview$(O):          tview.cpp
-tvtext1$(O):        tvtext1.cpp
-tvtext2$(O):        tvtext2.cpp
-tvwrite2$(O):       tvwrite2.cpp
-twindow$(O):        twindow.cpp
+$(F)colorsel$(O):       colorsel.cpp
+$(F)drivers$(O):        drivers.cpp
+$(F)edits2$(O):         edits2.cpp
+$(F)editstat$(O):       editstat.cpp
+$(F)frmline2$(O):       frmline2.cpp
+$(F)grp$(O):            grp.cpp
+$(F)help$(O):           help.cpp
+$(F)helpbase$(O):       helpbase.cpp
+$(F)histlist$(O):       histlist.cpp
+$(F)linux$(O):          linux.cpp
+$(F)linuxx$(O):         linuxx.cpp
+$(F)mapcolor$(O):       mapcolor.cpp
+$(F)menu$(O):           menu.cpp
+$(F)misc$(O):           misc.cpp
+$(F)msgbox$(O):         msgbox.cpp
+$(F)names$(O):          names.cpp
+$(F)new$(O):            new.cpp
+$(F)newstr$(O):         newstr.cpp
+$(F)os2handl$(O):       os2handl.cpp
+$(F)palette$(O):        palette.cpp
+$(F)sall$(O):           sall.cpp
+$(F)stddlg$(O):         stddlg.cpp
+$(F)swapst2$(O):        swapst2.cpp
+$(F)syserr$(O):         syserr.cpp
+$(F)tapplica$(O):       tapplica.cpp
+$(F)tbkgrnd$(O):        tbkgrnd.cpp
+$(F)tbutton$(O):        tbutton.cpp
+$(F)tchdrdlg$(O):       tchdrdlg.cpp
+$(F)tcheckbo$(O):       tcheckbo.cpp
+$(F)tcluster$(O):       tcluster.cpp
+$(F)tcmdset$(O):        tcmdset.cpp
+$(F)tcollect$(O):       tcollect.cpp
+$(F)tdesktop$(O):       tdesktop.cpp
+$(F)tdialog$(O):        tdialog.cpp
+$(F)tdircoll$(O):       tdircoll.cpp
+$(F)tdirlist$(O):       tdirlist.cpp
+$(F)teditor1$(O):       teditor1.cpp
+$(F)teditor2$(O):       teditor2.cpp
+$(F)teditwnd$(O):       teditwnd.cpp
+$(F)tevent$(O):         tevent.cpp
+$(F)textview$(O):       textview.cpp
+$(F)tfildlg$(O):        tfildlg.cpp
+$(F)tfilecol$(O):       tfilecol.cpp
+$(F)tfiledtr$(O):       tfiledtr.cpp
+$(F)tfillist$(O):       tfillist.cpp
+$(F)tframe$(O):         tframe.cpp
+$(F)tgrmv2$(O):         tgrmv2.cpp
+$(F)tgroup$(O):         tgroup.cpp
+$(F)thistory$(O):       thistory.cpp
+$(F)thistwin$(O):       thistwin.cpp
+$(F)thstview$(O):       thstview.cpp
+$(F)tindictr$(O):       tindictr.cpp
+$(F)tinputli$(O):       tinputli.cpp
+$(F)tlabel$(O):         tlabel.cpp
+$(F)tlistbox$(O):       tlistbox.cpp
+$(F)tlstview$(O):       tlstview.cpp
+$(F)tmemo$(O):          tmemo.cpp
+$(F)tmenubar$(O):       tmenubar.cpp
+$(F)tmenubox$(O):       tmenubox.cpp
+$(F)tmnuview$(O):       tmnuview.cpp
+$(F)tmouse$(O):         tmouse.cpp
+$(F)tobject$(O):        tobject.cpp
+$(F)tobjstrm$(O):       tobjstrm.cpp
+$(F)tparamte$(O):       tparamte.cpp
+$(F)tpoint$(O):         tpoint.cpp
+$(F)tprogram$(O):       tprogram.cpp
+$(F)tradiobu$(O):       tradiobu.cpp
+$(F)trescoll$(O):       trescoll.cpp
+$(F)tresfile$(O):       tresfile.cpp
+$(F)tscreen$(O):        tscreen.cpp
+$(F)tscrlbar$(O):       tscrlbar.cpp
+$(F)tscrolle$(O):       tscrolle.cpp
+$(F)tsortcol$(O):       tsortcol.cpp
+$(F)tstatict$(O):       tstatict.cpp
+$(F)tstatusl$(O):       tstatusl.cpp
+$(F)tstrcoll$(O):       tstrcoll.cpp
+$(F)tstrlist$(O):       tstrlist.cpp
+$(F)ttprvln2$(O):       ttprvln2.cpp
+$(F)tvcursr2$(O):       tvcursr2.cpp
+$(F)tvexpsd2$(O):       tvexpsd2.cpp
+$(F)tview$(O):          tview.cpp
+$(F)tvtext1$(O):        tvtext1.cpp
+$(F)tvtext2$(O):        tvtext2.cpp
+$(F)tvwrite2$(O):       tvwrite2.cpp
+$(F)twindow$(O):        twindow.cpp

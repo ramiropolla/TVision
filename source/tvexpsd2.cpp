@@ -42,13 +42,13 @@ int TView::exposedRec1(short x1, short x2, TView* p ) {
       if (x1<p->origin.x) { // f„ngt links vom Object an.
         if (x2<=p->origin.x) continue; // links vorbei
         if (x2>p->origin.x+p->size.x) {
-          if (exposedRec1( x1, p->origin.x, p )) return 1;
-          x1=p->origin.x+p->size.x;
+          if (exposedRec1( x1, short(p->origin.x), p )) return 1;
+          x1 = short(p->origin.x+p->size.x);
         }
         else
-          x2=p->origin.x;
+          x2 = short(p->origin.x);
       } else {
-        if ( x1<p->origin.x+p->size.x ) x1=p->origin.x+p->size.x;
+        if ( x1<p->origin.x+p->size.x ) x1 = short(p->origin.x+p->size.x);
         if ( x1>=x2 ) return 0; // komplett verdeckt.
       }
     }
@@ -63,9 +63,9 @@ int TView::exposedRec2( short x1, short x2, TView* p ) {
 
   StaticVars2 savedStatics = staticVars2;
 
-  staticVars2.y += p->origin.y;
-  x1 += p->origin.x;
-  x2 += p->origin.x;
+  staticVars2.y = short(staticVars2.y + p->origin.y);
+  x1 = short(x1 + p->origin.x);
+  x2 = short(x2 + p->origin.x);
   staticVars2.target=p;
 
   TGroup* g=p->owner;
@@ -73,8 +73,8 @@ int TView::exposedRec2( short x1, short x2, TView* p ) {
     staticVars2 = savedStatics;
     return 0;
   }
-  if (x1<g->clip.a.x) x1 = g->clip.a.x;
-  if (x2>g->clip.b.x) x2 = g->clip.b.x;
+  if (x1<g->clip.a.x) x1 = short(g->clip.a.x);
+  if (x2>g->clip.b.x) x2 = short(g->clip.b.x);
   if (x1>=x2) {
     staticVars2 = savedStatics;
     return 0;
@@ -89,7 +89,7 @@ Boolean TV_CDECL TView::exposed() {
   if ( !(state & sfExposed) || size.x <= 0 || size.y <= 0 ) return Boolean(0);
   for (short y=0; y<size.y; y++) {
     staticVars2.y=y;
-    if (exposedRec2( 0, size.x, this )) return Boolean(1);
+    if (exposedRec2( 0, short(size.x), this )) return Boolean(1);
   }
   return Boolean(0);
 }

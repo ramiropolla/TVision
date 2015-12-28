@@ -33,6 +33,10 @@ const int DEFAULT_SAFETY_POOL_SIZE = 4096;
  * class and the global operator new is a friend function.
  * @short Part of the memory manager
  */
+#ifdef _MSC_VER
+#pragma warning(disable:4291)   // no placement delete
+#endif
+
 class TBufListEntry
 {
 private:

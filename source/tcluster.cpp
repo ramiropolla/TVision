@@ -118,21 +118,21 @@ void TCluster::drawBox( const char *icon, char marker)
                     color = cSel;
                 else
                     color = cNorm;
-                b.moveChar( col, ' ', color, size.x - col );
-                b.moveCStr( col, icon, color );
+                b.moveChar( ushort(col), ' ', color, ushort(size.x - col) );
+                b.moveCStr( ushort(col), icon, color );
                 if( mark(cur) )
-                    b.putChar( col+2, marker );
-                b.moveCStr( col+5, (char *)(strings->at(cur)), color );
+                    b.putChar( ushort(col+2), marker );
+                b.moveCStr( ushort(col+5), (char *)(strings->at(cur)), color );
                 if( showMarkers && (state & sfSelected) != 0 && cur == sel )
                     {
-                    b.putChar( col, specialChars[0] );
-                    b.putChar( column(cur+size.y)-1, specialChars[1] );
+                    b.putChar( ushort(col), specialChars[0] );
+                    b.putChar( ushort(column(cur+size.y)-1), specialChars[1] );
                     }
                 }
             }
-        writeBuf( 0, i, size.x, 1, b );
+        writeBuf( 0, ushort(i), ushort(size.x), 1, b );
         }
-    setCursor( column(sel)+2, row(sel) );
+    setCursor( ushort(column(sel)+2), ushort(row(sel)) );
 }
 
 void TCluster::getData(void * rec, size_t recsize)
@@ -146,7 +146,7 @@ ushort TCluster::getHelpCtx()
     if( helpCtx == hcNoContext )
         return hcNoContext;
     else
-        return helpCtx + sel;
+        return ushort(helpCtx + sel);
 }
 
 TPalette& TCluster::getPalette() const

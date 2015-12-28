@@ -117,24 +117,24 @@ TColorSelector::TColorSelector( const TRect& bounds, ColorSel aSelType ) :
 void TColorSelector::draw()
 {
     TDrawBuffer b;
-    b.moveChar( 0, ' ', 0x70, size.x );
+    b.moveChar( 0, ' ', 0x70, ushort(size.x) );
     for(int i = 0; i <= size.y; i++ )
         {
         if( i < 4 )
             {
-            for( int j = 0; j < 4; j++ )
+            for( int j = 0; j < 4; ushort(j++) )
                 {
                 int c = i*4+j;
-                b.moveChar( j*3, icon, c, 3 );
+                b.moveChar( ushort(j*3), icon, ushort(c), 3 );
                 if( c == color )
                     {
-                    b.putChar( j*3+1, 8 );
+                    b.putChar( ushort(j*3+1), 8 );
                     if( c == 0 )
-                        b.putAttribute( j*3+1, 0x70 );
+                        b.putAttribute( ushort(j*3+1), 0x70 );
                     }
                 }
             }
-        writeLine( 0, i, size.x, 1, b );
+        writeLine( 0, ushort(i), ushort(size.x), 1, b );
         }
 }
 
@@ -145,7 +145,7 @@ void TColorSelector::colorChanged()
         msg = cmColorForegroundChanged;
     else
         msg = cmColorBackgroundChanged;
-    message( owner, evBroadcast, msg, (void*)(int)color );
+    message( owner, evBroadcast, ushort(msg), (void*)(int)color );
 }
 
 void TColorSelector::handleEvent( TEvent& event )
@@ -163,7 +163,7 @@ void TColorSelector::handleEvent( TEvent& event )
               do {
                 if ( mouseInView( event.mouse.where ) ) {
                   TPoint mouse = makeLocal( event.mouse.where );
-                  color = mouse.y*4 + mouse.x/3;
+                  color = uchar(mouse.y*4 + mouse.x/3);
                 } else
                   color = oldColor;
                 colorChanged();
@@ -182,7 +182,7 @@ void TColorSelector::handleEvent( TEvent& event )
                     if( color > 0 )
                         color--;
                     else
-                        color = maxCol;
+                        color = (uchar)maxCol;
                     break;
 
                 case kbRight:
@@ -196,9 +196,9 @@ void TColorSelector::handleEvent( TEvent& event )
                     if( color > width-1 )
                         color -= width;
                     else if( color == 0 )
-                        color = maxCol;
+                        color = (uchar)maxCol;
                     else
-                        color += maxCol - width;
+                        color = color + uchar(maxCol - width);
                     break;
 
                 case kbDown:
@@ -207,7 +207,7 @@ void TColorSelector::handleEvent( TEvent& event )
                     else if( color == maxCol )
                         color = 0;
                     else
-                        color -= maxCol - width;
+                        color = color - uchar(maxCol - width);
                     break;
 
                 default:
@@ -347,8 +347,8 @@ void TColorDisplay::draw()
     const size_t len = strlen( text );
     TDrawBuffer b;
     for( unsigned i = 0; i <= size.x/len; i++ )
-        b.moveStr( i*len, text, c );
-    writeLine( 0, 0, size.x, size.y, b );
+        b.moveStr( ushort(i*len), text, c );
+    writeLine( 0, 0, ushort(size.x), ushort(size.y), b );
 }
 
 void TColorDisplay::handleEvent( TEvent& event )

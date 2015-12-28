@@ -53,7 +53,7 @@ ushort getAltCode(char c)
     if( c == 0 )
         return 0;
 
-    c = toupper(c);
+    c = (char)toupper(c);
 
     if( (unsigned char)c == 0xF0 )
         return kbAltSpace;       // special case to handle alt-Space
@@ -61,11 +61,11 @@ ushort getAltCode(char c)
     size_t i;
     for( i = 0; i < sizeof( altCodes1 ); i++)
        if( altCodes1[i] == c )
-        return (i+0x10) << 8;
+        return ushort((i+0x10) << 8);
 
     for( i = 0; i < sizeof( altCodes2); i++)
         if (altCodes2[i] == c)
-            return (i+0x78) << 8;
+            return ushort((i+0x78) << 8);
 
     return 0;
 }

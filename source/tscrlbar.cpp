@@ -59,15 +59,15 @@ void TScrollBar::drawPos( int pos )
     int s = getSize() - 1;
     b.moveChar( 0, chars[0], getColor(2), 1 );
     if( maxVal == minVal )
-        b.moveChar( 1, chars[4], getColor(1), s-1 );
+        b.moveChar( 1, chars[4], getColor(1), ushort(s-1) );
     else
         {
-        b.moveChar( 1, chars[2], getColor(1), s-1 );
-        b.moveChar( pos, chars[3], getColor(3), 1 );
+        b.moveChar( 1, chars[2], getColor(1), ushort(s-1) );
+        b.moveChar( ushort(pos), chars[3], getColor(3), 1 );
         }
 
-    b.moveChar( s, chars[1], getColor(2), 1 );
-    writeBuf( 0, 0, size.x, size.y, b );
+    b.moveChar( ushort(s), chars[1], getColor(2), 1 );
+    writeBuf( 0, 0, ushort(size.x), ushort(size.y), b );
 }
 
 TPalette& TScrollBar::getPalette() const

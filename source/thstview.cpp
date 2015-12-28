@@ -30,7 +30,7 @@ THistoryViewer::THistoryViewer( const TRect& bounds,
     TListViewer(bounds, 1, aHScrollBar, aVScrollBar),
     historyId( aHistoryId )
 {
-    setRange( historyCount( aHistoryId ) );
+    setRange( historyCount( (uchar)aHistoryId ) );
 //    if( range > 1 )
 //        focusItem( 1 );
     hScrollBar->setRange( 0, historyWidth() - size.x + 3 );
@@ -46,7 +46,7 @@ void THistoryViewer::getText( char *dest, int item, size_t destsize )
 {
   if ( ssize_t(destsize) > 0 )
   {
-    const char *str = historyStr( historyId, item );
+    const char *str = historyStr( (uchar)historyId, item );
     if( str != NULL )
       qstrncpy( dest, str, destsize );
     else
@@ -78,11 +78,11 @@ void THistoryViewer::handleEvent( TEvent& event )
 int THistoryViewer::historyWidth()
 {
     size_t width = 0;
-    int count = historyCount( historyId );
+    int count = historyCount( (uchar)historyId );
     for( int i = 0; i < count; i++ )
         {
-        size_t T = strlen( historyStr( historyId, i ) );
+        size_t T = strlen( historyStr( (uchar)historyId, i ) );
         width = qmax( width, T );
         }
-    return width;
+    return (int)width;
 }

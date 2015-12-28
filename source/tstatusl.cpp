@@ -72,7 +72,7 @@ void TStatusLine::drawSelect( TStatusItem *selected )
     ushort cSelect = getColor(0x0604);
     ushort cNormDisabled = getColor(0x0202);
     ushort cSelDisabled = getColor(0x0505);
-    b.moveChar( 0, ' ', cNormal, size.x );
+    b.moveChar( 0, ' ', cNormal, ushort(size.x) );
     TStatusItem *T =  items;
     ushort i = 0;
 
@@ -80,7 +80,7 @@ void TStatusLine::drawSelect( TStatusItem *selected )
         {
         if( T->text != 0 )
             {
-            ushort l = cstrlen( T->text );
+            ushort l = (ushort)cstrlen( T->text );
             if( i + l < size.x )
                 {
                 if( commandEnabled( T->command) )
@@ -115,7 +115,7 @@ void TStatusLine::drawSelect( TStatusItem *selected )
 //            i += strlen(hintBuf);
             }
         }
-    writeLine( 0, 0, size.x, 1, b );
+    writeLine( 0, 0, ushort(size.x), 1, b );
 }
 
 void TStatusLine::findItems()
@@ -144,7 +144,7 @@ TStatusItem *TStatusLine::itemMouseIsIn( TPoint mouse )
         {
         if( T->text != 0 )
             {
-            ushort k = i + cstrlen(T->text) + 2;
+            ushort k = ushort(i + cstrlen(T->text) + 2);
             if( mouse.x >= i && mouse. x < k )
                 return T;
             i = k;

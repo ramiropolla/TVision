@@ -21,7 +21,7 @@
 TPalette::TPalette( const char* d, ushort len ) :
     data( new char[ len+1 ] )
 {
-    data[0] = len;
+    data[0] = (uchar)len;
     memcpy( data+1, d, len );
 }
 

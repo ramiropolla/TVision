@@ -106,7 +106,7 @@
 
 #define USE_DANGEROUS_FUNCTIONS
 
-#ifdef __LINUX__
+#if defined(__LINUX__) || defined(__MAC__)
 #define Uses_TButton
 #define Uses_TColorSelector
 #define Uses_TDeskTop
@@ -144,11 +144,17 @@
 #include <dlfcn.h>    // dlopen/dlsym
 #include <poll.h>
 #include <sys/stat.h> // console switching
+#ifdef __LINUX__
 #include <gpm.h>
+#endif
 #include <curses.h>   // terminfo
 #include <term.h>
 #include <X11/Xlib.h> // X11console
 #undef buttons    // term.h
+
+#ifdef __MAC__
+typedef void (*sighandler_t)(int);
+#endif
 
 //---------------------------------------------------------------------------
 /*
@@ -236,6 +242,7 @@ typedef Bool      (*tXQueryPointer)(Display *, Window, Window *, Window *,
 static tXCloseDisplay pXCloseDisplay;
 static tXQueryPointer pXQueryPointer;
 //GPM (console mouse) support
+#ifdef __LINUX__
 static void   *hGPM;
 typedef int   (*tGpm_Open)(Gpm_Connect *, int);
 typedef void  (*tGpm_Close)(void);
@@ -243,6 +250,7 @@ typedef int   (*tGpm_GetEvent)(Gpm_Event *);
 static  tGpm_Open     pGpm_Open;
 static  tGpm_Close    pGpm_Close;
 static  tGpm_GetEvent pGpm_GetEvent;
+#endif
 // for terminal with !vt positioning
 static void   *hCurses;
 
@@ -411,6 +419,35 @@ get_data:
         goto get_data;
     } // switch
 }
+
+//---------------------------------------------------------------------------
+#ifdef __MAC__
+int qpoll(pollfd *pfd, int n, int wait)
+{
+  fd_set fds;
+  struct timeval to;
+
+  FD_ZERO(&fds);
+  int ns = 0;
+  for ( int i=0; i < n; i++ )
+  {
+    int fd = pfd[i].fd;
+    FD_SET(fd, &fds);
+    if ( fd > ns )
+      ns = fd;
+  }
+  to.tv_sec = 0;
+  to.tv_usec = wait;
+  int code = select(ns+1, &fds, NULL, NULL, &to);
+  if ( code > 0 )
+  {
+    for ( int i=0; i < n; i++ )
+      pfd[i].revents = FD_ISSET(pfd[i].fd, &fds) ? POLLIN : 0;
+  }
+  return code;
+}
+#define poll qpoll
+#endif
 
 //---------------------------------------------------------------------------
 static void term_out(const char *buf, size_t len)
@@ -1121,14 +1158,16 @@ uchar getShiftState(void)
 #ifdef XTERM_DEBUG
       LOG("XMASK=%X", gmsk);
 #endif
-      goto apply_mask;
+      return state2tvstate(cmsk);
     }
 
+#ifdef __LINUX__
     cmsk = 6;    /* TIOCLINUX function #6 */
     if(work.pc_console && ioctl(0, TIOCLINUX, &cmsk) != -1) {
-apply_mask:
       shift = state2tvstate(cmsk);
-    } else shift = lastMods;
+    } else
+#endif
+      shift = lastMods;
 
     return(shift);
 }
@@ -1242,6 +1281,7 @@ down_event:
 }
 
 //---------------------------------------------------------------------------
+#ifdef __LINUX__
 static void draw_pointer(void)
 {
     if(ioctl(0, TIOCLINUX, &con_mou.tioc))
@@ -1354,6 +1394,10 @@ reread:
     msSetEvent(ev);
     return(1);
 }
+#else
+inline uchar create_gpm_event(TEvent &) { return 0; }
+inline void draw_pointer(void) {}
+#endif
 
 //---------------------------------------------------------------------------
 static void xmouse_up(TEvent &event)
@@ -1372,8 +1416,9 @@ static void xmouse_up(TEvent &event)
 static void get_key_mouse_event(TEvent &event, ulong curTime)
 {
     /* if working on the console and gpm is not present at start...*/
+#ifdef __LINUX__
     if(gpmReopenTimer.isExpired(curTime)) restart_gpm(0, curTime);
-
+#endif
     /* redraw mouse poiner after last in/out*/
     if(con_mou.cmd == 3) {
       draw_pointer();
@@ -1855,6 +1900,7 @@ static void set_mouse_attach(char get)
     LOG("mouse %stach", get ? "at" : "de");
 #endif
 
+#ifdef __LINUX__
     if(hGPM) {
       if(!get) {
         gpmReopenTimer.stop();  // PARANOYA
@@ -1864,7 +1910,9 @@ static void set_mouse_attach(char get)
           pGpm_Close();
         }
       } else if(hGPM) restart_gpm(0, 0);
-    } else if(work.have_xmice) {
+    } else
+#endif
+    if(work.have_xmice) {
       if(get) {
         XMOU_CMD_BYTE = 's';
         xmouse_send();  // save mode
@@ -2486,7 +2534,9 @@ set_mice_key:
       keymap[i].mods    = 0;
       overlapXmice_code = keymap[i].tvcode;
       keymap[i].tvcode  = kbMouse;
+#ifdef __LINUX__
       if(!hGPM) work.have_xmice = 1;
+#endif
     }
 
 xmice_done:
@@ -2629,7 +2679,9 @@ TScreen::~TScreen()
       pXCloseDisplay(x11_display);
       dlclose(hX11);
     }
+#ifdef __LINUX__
     if(hGPM)    dlclose(hGPM);
+#endif
     if(hCurses) dlclose(hCurses);
 }
 
@@ -2713,6 +2765,7 @@ cyrcvt_all:
     pfd_data[0].fd = STDIN_FILENO;
     pfd_data[0].events = pfd_data[1].events = POLLIN;
     con_mou.tioc = 2;
+#ifdef __LINUX__
     {
       int tmp = 7;  // get mouse reporting (check tty==con :)
       if(ioctl(STDIN_FILENO, TIOCLINUX, &tmp) != -1) work.pc_console = 1;
@@ -2733,6 +2786,7 @@ free_gpm:
         hGPM = NULL;
       } else if(no_gpm && !restart_gpm(-1, 0)) goto free_gpm;
     }
+#endif
 
 //---
     curs_moveto = _moveto_vt; // preinit (standard)
@@ -2888,4 +2942,4 @@ without_ncurses:
 
 //---------------------------------------------------------------------------
 
-#endif // __LINUX__
+#endif // __UNIX__

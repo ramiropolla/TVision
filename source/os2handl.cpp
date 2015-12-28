@@ -193,7 +193,7 @@ static uchar get_alt_pressed_mask(void)
 
 unsigned char getShiftState() {
 // returns a value that can be used as a substitute for the shift state at [0040:0017]
-  uchar state = TThreads::ir.Event.KeyEvent.dwControlKeyState;
+  uchar state = (uchar)TThreads::ir.Event.KeyEvent.dwControlKeyState;
   uchar tvstate = 0;
   if ( state & get_alt_pressed_mask() ) tvstate |= kbAltShift;
   if ( state & (RIGHT_CTRL_PRESSED|LEFT_CTRL_PRESSED) ) tvstate |= kbCtrlShift;
@@ -502,9 +502,9 @@ char *TThreads::clipboard_get(size_t &sz, bool line)
     return answer;
 }
 
-#elif !defined(__LINUX__)
-#error "For this system not implemented!"
-#endif //__LINUX__
+#elif !defined(__UNIX__)
+#error "Not implemented for this system!"
+#endif //__UNIX__
 
 //---------------------------------------------------------------------------
 

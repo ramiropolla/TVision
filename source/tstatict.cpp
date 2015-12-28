@@ -44,15 +44,15 @@ void TStaticText::draw()
     TDrawBuffer b;
     char s[TEXTBUF_SIZE];
 
-    color = getColor(1);
+    color = (uchar)getColor(1);
     getText(s, sizeof(s));
-    l = strlen(s);
+    l = (int)strlen(s);
     p = 0;
     y = 0;
     center = False;
     while (y < size.y)
         {
-        b.moveChar(0, ' ', color, size.x);
+        b.moveChar(0, ' ', color, ushort(size.x));
         if (p < l)
             {
             if (s[p] == 3)
@@ -77,7 +77,7 @@ void TStaticText::draw()
                j = (size.x - p + i) / 2 ;
             else
                j = 0;
-            b.moveBuf(j, &s[i], color, (p - i));
+            b.moveBuf(ushort(j), &s[i], color, ushort((p - i)));
             while ((p < l) && (s[p] == ' '))
                 p++;
             if ((p < l) && (s[p] == '\n'))
@@ -88,7 +88,7 @@ void TStaticText::draw()
                     p++;
                 }
             }
-        writeLine(0, y++, size.x, 1, b);
+        writeLine(0, ushort(y++), ushort(size.x), 1, b);
         }
 }
 

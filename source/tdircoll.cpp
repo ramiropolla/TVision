@@ -31,7 +31,7 @@
 #ifdef __FAT__
 Boolean driveValid( char drive )
 {
-  drive = toupper(drive);
+  drive = (char)toupper(drive);
 #ifdef __MSDOS__
   struct diskfree_t df;
   return Boolean(_dos_getdiskfree(drive-'@',&df) == 0);
@@ -67,7 +67,7 @@ Boolean pathValid( const char *path )
     char expPath[MAXPATH];
     qstrncpy( expPath, path, sizeof(expPath) );
     fexpand( expPath, sizeof(expPath) );
-    int len = strlen(expPath);
+    int len = (int)strlen(expPath);
 #ifdef __FAT__
     if( len <= 3 )
         return driveValid(expPath[0]);
@@ -134,7 +134,7 @@ void getCurDir( char *dir, size_t dirsize )
 {
   if ( ssize_t(dirsize) > 0 )
   {
-    getcwd(dir, dirsize);
+    getcwd(dir, (int)dirsize);
     size_t len = strlen(dir);
     if ( len > 3 && len < dirsize - 1 && dir[len-1] != DIRCHAR )
     {

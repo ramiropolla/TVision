@@ -38,7 +38,7 @@ protected:
 
 };
 
-#ifdef __MACOSX__
+#ifdef __ppc__
 #define loByte(w)    (((uchar *)(&w))[1])
 #define hiByte(w)    (((uchar *)(&w))[0])
 #else

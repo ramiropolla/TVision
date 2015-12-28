@@ -82,7 +82,7 @@ static void NT_CDECL SystemSuspend(void)
     TSystemError::suspend();
     TEventQueue::suspend();
     TScreen::suspend();
-#ifndef __LINUX__
+#ifndef __UNIX__
     TThreads::suspend();
 #endif
   }
@@ -148,7 +148,7 @@ void TSystemInit::resume()
 {
   if ( !inited ) {
     inited = 1;
-#ifndef __LINUX__
+#ifndef __UNIX__
     TThreads::resume();
 #endif
     TScreen::resume();
@@ -280,11 +280,11 @@ void TProgram::getEvent(TEvent& event)
         extern int changed_nt_console_size;
         if ( changed_nt_console_size != 0 )
         {
-          TProgram::application->setScreenMode(changed_nt_console_size);
+          TProgram::application->setScreenMode((ushort)changed_nt_console_size);
           changed_nt_console_size = 0;
         }
         if ( event.what == evNothing ) idle();
-#elif defined(__LINUX__)
+#elif defined(__UNIX__)
         TScreen::getEvent(event);
         if ( event.what == evNothing )
           idle();
@@ -409,7 +409,7 @@ void TProgram::initScreen()
     }
 #elif defined(__NT__)
     short mode = TDisplay::smCO80;
-#elif defined(__MSDOS__) || defined(__LINUX__)
+#elif defined(__MSDOS__) || defined(__UNIX__)
     short mode = TScreen::screenMode;
 #else
 #error  Unknown platform!

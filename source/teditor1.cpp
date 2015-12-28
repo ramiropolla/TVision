@@ -24,7 +24,7 @@
 #define Uses_TReplaceDialogRec
 #define Uses_opstream
 #define Uses_ipstream
-#ifdef __NT__
+#if defined(__NT__) || defined(__X11__)
 #define Uses_TThreaded
 #endif
 #include <tv.h>
@@ -198,7 +198,7 @@ size_t TEditor::charPtr( size_t p, int target )
 Boolean TEditor::clipCopy()
 {
     Boolean res = False;
-#ifdef __NT__
+#if defined(__NT__) || defined(__X11__)
     if ( TThreads::clipboard_put(buffer, selStart, selEnd) )
         {
         selecting = False;
@@ -224,7 +224,7 @@ void TEditor::clipCut()
 
 void TEditor::clipPaste()
 {
-#ifdef __NT__
+#if defined(__NT__) || defined(__X11__)
     size_t  size = MAX_GET_FROM_CLIP;
     char    *data = TThreads::clipboard_get(size, false);
     if ( data != NULL)
@@ -338,7 +338,7 @@ void TEditor::doUpdate()
 {
     if( updateFlags != 0 )
         {
-        setCursor(curPos.x - delta.x, curPos.y - delta.y);
+        setCursor(ushort(curPos.x - delta.x), ushort(curPos.y - delta.y));
         if( (updateFlags & ufView) != 0 )
             drawView();
         else
@@ -373,7 +373,7 @@ void TEditor::drawLines( int y, int count, size_t linePtr )
         {
         ushort b[maxLineLength];
         formatLine( b, linePtr, delta.x+size.x, color );
-        writeBuf(0, y, size.x, 1, &b[delta.x]);
+        writeBuf(0, ushort(y), ushort(size.x), 1, &b[delta.x]);
         linePtr = nextLine(linePtr);
         y++;
         }

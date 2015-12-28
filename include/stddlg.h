@@ -14,6 +14,10 @@
 #ifdef __BORLANDC__
 #pragma warn -hid
 #endif
+#if defined(_MSC_VER)
+#pragma warning(disable:4263 4264)  // hidden virtual functions
+#endif
+
 
 #include <cm_codes.h>
 
@@ -94,7 +98,7 @@ inline opstream& operator << ( opstream& os, TFileInputLine* cl )
 #if defined( Uses_TFileCollection ) && !defined( __TFileCollection )
 #define __TFileCollection
 
-class TSearchRec;
+struct TSearchRec;
 
 class TFileCollection: public TSortedCollection
 {

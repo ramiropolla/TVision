@@ -85,8 +85,8 @@ void TView::calcBounds( TRect& bounds, TPoint delta )
 {
     bounds = getBounds();
 
-    short s = owner->size.x;
-    short d = delta.x;
+    short s = short(owner->size.x);
+    short d = short(delta.x);
 
     if( (growMode & gfGrowLoX) != 0 )
         grow(bounds.a.x);
@@ -94,8 +94,8 @@ void TView::calcBounds( TRect& bounds, TPoint delta )
     if( (growMode & gfGrowHiX) != 0 )
         grow(bounds.b.x);
 
-    s = owner->size.y;
-    d = delta.y;
+    s = short(owner->size.y);
+    d = short(delta.y);
 
     if( (growMode & gfGrowLoY) != 0 )
         grow(bounds.a.y);
@@ -289,8 +289,8 @@ void TView::draw()
 {
     TDrawBuffer  b;
 
-    b.moveChar( 0, ' ', getColor(1), size.x );
-    writeLine( 0, 0, size.x, size.y, b );
+    b.moveChar( 0, ' ', getColor(1), short(size.x) );
+    writeLine( 0, 0, short(size.x), short(size.y), b );
 }
 
 void TView::drawCursor()
@@ -389,7 +389,7 @@ ushort TView::getColor( ushort color )
     ushort colorPair = color >> 8;
 
     if( colorPair != 0 )
-        colorPair = mapColor(colorPair) << 8;
+        colorPair = mapColor((uchar)colorPair) << 8;
 
     colorPair |= mapColor( uchar(color) );
 
@@ -680,7 +680,7 @@ void TView::setState( ushort aState, Boolean enable )
             resetCursor();
             message( owner,
                      evBroadcast,
-                     (enable == True) ? cmReceivedFocus : cmReleasedFocus,
+                     ushort((enable == True) ? cmReceivedFocus : cmReleasedFocus),
                      this
                    );
             break;

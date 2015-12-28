@@ -10,19 +10,28 @@
 /*
         Check target platform
 */
-#if !defined(__MSDOS__) && !defined(__OS2__) && !defined(__NT__) && !defined(__LINUX__)
+#if !defined(__MSDOS__) && !defined(__OS2__) && !defined(__NT__) && !defined(__LINUX__) && !defined(__MAC__)
 #error "Unknown target platform!"
 #endif
+
+#ifdef _MSC_VER
+#pragma warning(disable:4250)  // call virtual fuinction via dominance
+#endif
+
+#if defined(__MAC__) || defined(__LINUX__)
+#define __UNIX__
+#endif
+
 /*
         Define TV_CDECL
 */
-#if defined(__NT__) || defined(__LINUX__)
+#if defined(__NT__) || defined(__UNIX__)
 #define TV_CDECL
 #else
 #define TV_CDECL        cdecl
 #endif
 
-#ifdef __LINUX__
+#ifdef __UNIX__
 #define MAXSTR 1024
 #define _Cdecl
 #define stricmp strcasecmp
@@ -30,9 +39,6 @@
 #include <unistd.h>
 void LOG(const char *format, ...)  // debug
     __attribute__((__format__(__printf__, 1, 2)));
-#ifdef __MACOSX__
-typedef unsigned long ulong;
-#endif
 #else
 typedef unsigned long ulong;
 #endif

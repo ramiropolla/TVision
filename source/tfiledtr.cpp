@@ -32,7 +32,7 @@
 
 inline ushort min( size_t u1, size_t u2 )
 {
-    return u1 < u2 ? u1 : u2;
+    return ushort(u1 < u2 ? u1 : u2);
 }
 
 TFileEditor::TFileEditor( const TRect& bounds,
@@ -195,8 +195,8 @@ Boolean TFileEditor::saveFile()
         }
     else
         {
-        writeBlock( f, buffer, curPtr );
-        writeBlock( f, buffer+curPtr+gapLen, bufLen-curPtr );
+        writeBlock( f, buffer, ulong(curPtr) );
+        writeBlock( f, buffer+curPtr+gapLen, ulong(bufLen-curPtr) );
 
         if(ferror(f) || feof(f))
             {

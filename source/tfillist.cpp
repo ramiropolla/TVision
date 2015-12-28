@@ -25,12 +25,11 @@
 #define Uses_TKeys
 #include <tv.h>
 
-#include <time.h>
 #include <errno.h>
 #include <stdio.h>
 #include <assert.h>
 
-#ifdef __LINUX__
+#ifdef __UNIX__
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -174,7 +173,7 @@ void TFileList::readDirectory( const char *aWildCard )
   int res;
   DirSearchRec *p;
 
-  const unsigned int findAttr = FA_RDONLY | FA_ARCH;
+  static const unsigned int findAttr = FA_RDONLY | FA_ARCH;
 
   TFileCollection *fileList = new TFileCollection( 5, 5 );
 
@@ -191,13 +190,13 @@ void TFileList::readDirectory( const char *aWildCard )
       p = new DirSearchRec;
       if( p != NULL )
       {
-        p->attr = s.ff_attrib;
+        p->attr = (uchar)s.ff_attrib;
 #if defined(_MSC_VER)
-        p->time = time2searchrec(s.ff_ftime);
+        p->time = time2searchrec((time_t)s.ff_ftime);
 #else
         p->time = s.ff_ftime + (long(s.ff_fdate) << 16);
 #endif
-        p->size = s.ff_fsize;
+        p->size = (long)s.ff_fsize;
         qstrncpy(p->name, s.ff_name, sizeof(p->name));
         fileList->insert( p );
       }
@@ -221,24 +220,24 @@ void TFileList::readDirectory( const char *aWildCard )
       {
         upattr = s.ff_attrib;
 #if defined(_MSC_VER)
-        uptime = time2searchrec(s.ff_ftime);
+        uptime = time2searchrec((time_t)s.ff_ftime);
 #else
         uptime = s.ff_ftime + (long(s.ff_fdate) << 16);
 #endif
-        upsize = s.ff_fsize;
+        upsize = (long)s.ff_fsize;
       }
       else if ( s.ff_name[0] != '.' || s.ff_name[1] != '\0' )
       {
         p = new DirSearchRec;
         if ( p != NULL )
         {
-          p->attr = s.ff_attrib;
+          p->attr = (uchar)s.ff_attrib;
 #if defined(_MSC_VER)
-          p->time = time2searchrec(s.ff_ftime);
+          p->time = time2searchrec((time_t)s.ff_ftime);
 #else
           p->time = s.ff_ftime + (long(s.ff_fdate) << 16);
 #endif
-          p->size = s.ff_fsize;
+          p->size = (long)s.ff_fsize;
           qstrncpy(p->name, s.ff_name, sizeof(p->name));
           fileList->insert( p );
         }
@@ -252,7 +251,7 @@ void TFileList::readDirectory( const char *aWildCard )
     p = new DirSearchRec;
     if ( p != 0 )
     {
-      p->attr = upattr;
+      p->attr = (uchar)upattr;
       p->time = uptime;
       p->size = upsize;
       qstrncpy( p->name, "..", sizeof(p->name) );
@@ -429,11 +428,11 @@ char ext[MAXEXT];
     int flags = fnsplit( rpath, drive, dir, file, ext );
     if( (flags & DRIVE) == 0 )
         {
-        drive[0] = getdisk() + 'A';
+        drive[0] = char(getdisk() + 'A');
         drive[1] = ':';
         drive[2] = '\0';
         }
-    drive[0] = toupper(drive[0]);
+    drive[0] = (char)toupper(drive[0]);
     if( (flags & DIRECTORY) == 0 || dir[0] != DIRCHAR )
         {
         char curdir[MAXDIR];

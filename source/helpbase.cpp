@@ -267,7 +267,7 @@ void THelpTopic::setNumCrossRefs( int i )
         delete [] crossRefPtr;
         }
     crossRefs = p;
-    numRefs = i;
+    numRefs = (ushort)i;
 }
 
 
@@ -296,7 +296,7 @@ inline int scan( char *p, int offset, char c)
     else
        {
        if ((temp2 - temp1) <= maxViewWidth )
-         return (temp2 - temp1) + 1;
+         return ulong((temp2 - temp1) + 1);
        else
          return maxViewWidth;
        }
@@ -309,7 +309,7 @@ char *THelpTopic::wrapText( char *text, int size,
 
     i = scan(text, offset, '\n');
     if (i + offset > size ) i = size - offset;
-    if ( (i >= width) && wrap ) {
+    if ( (i > width) && wrap ) {
       i = offset + width;
       if ( i > size ) {
         i = size;
@@ -330,7 +330,7 @@ char *THelpTopic::wrapText( char *text, int size,
     }
     qstrncpy(line, text+offset, qmin((size_t)(i+1),lineBufLen));
     // remove the last '\n'
-    size_t len = strlen(line);
+    ulong len = (ulong)strlen(line);
     offset += len;
     if ( len > 0 && line[len-1] == '\n' )
       line[--len] = '\0';
@@ -470,7 +470,7 @@ void THelpIndex::add( int i, long val )
             delete [] index;
             }
         index = p;
-        size = newSize;
+        size = (ushort)newSize;
         }
     indexArrayPtr = index + i;
     *indexArrayPtr = val;
@@ -843,13 +843,13 @@ THelpFile::~THelpFile(void)
 {
 }
 
-extern void ActionKey(const char *str, char *buf, size_t bufsize);
+extern "C" void ActionKey(const char *str, char *buf, size_t bufsize);
 
 // return the new text (possibly reallocated, if not enough space in the original buffer)
 static char *addxrefs( THelpTopic *topic, char *text, size_t textsize ) { /* ig 22.04.93 */
   char *base = text;
   char *tend = text + textsize;
-  int base_size = strlen(base) + 1;
+  int base_size = (ulong)strlen(base) + 1;
   while ( (text=strchr(text,'@')) != NULL ) {
     int y;
     text++;
@@ -860,7 +860,7 @@ static char *addxrefs( THelpTopic *topic, char *text, size_t textsize ) { /* ig 
         *end++ = '\0';
         char actionkey[MAXSTR];
         ActionKey(text+1, actionkey, sizeof(actionkey));
-        int resize = text + strlen(actionkey) - end; // how many bytes must we add to the string ?
+        int resize = ulong(text + strlen(actionkey) - end); // how many bytes must we add to the string ?
         if (resize > 0) // if the buffer needs resizing,
         {
           char *base_old = base;
@@ -892,9 +892,9 @@ static char *addxrefs( THelpTopic *topic, char *text, size_t textsize ) { /* ig 
     memmove(text-1,start,len);
     memmove(text-1+len,end,strlen(end)+1);
     TCrossRef ref;
-    ref.ref    = y;
-    ref.offset = (int)(text-base);
-    ref.length = len;
+    ref.ref    = (ushort)y;
+    ref.offset = (ushort)(int)(text-base);
+    ref.length = (uchar)len;
     topic->addCrossRef(ref);
   }
   return base;
@@ -943,7 +943,7 @@ THelpTopic *THelpFile::getTopic( int i )
     }
     text = addxrefs(topic, text, len+1);
     para->text = text;
-    para->size = strlen(text);
+    para->size = (ushort)strlen(text);
     para->wrap = Wrap;
     para->next = 0;
     topic->addParagraph(para);
@@ -967,7 +967,7 @@ THelpTopic *THelpFile::invalidTopic()
     topic =  new THelpTopic;
     para =  new TParagraph;
     para->text = newStr(invalidText);
-    para->size = strlen(invalidText);
+    para->size = (ushort)strlen(invalidText);
     para->wrap = False;
     para->next = 0;
     topic->addParagraph(para);

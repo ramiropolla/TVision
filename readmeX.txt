@@ -1,6 +1,6 @@
-$Id: readmeX.txt,v 1.7 2005/10/11 02:52:27 jeremy Exp $
+$Id: //depot/ida/tvision/readmeX.txt#3 $
 
-TVision ported to Linux X Windows
+TVision ported to Linux, and Darwin/Mac OS X X Windows
 -----------------------------------------------------------
 
 This package is a module which offers support for running IDA natively under
@@ -11,10 +11,18 @@ a "VGA" font on your X server.
 Release notes
 -----------------------------------------------------------
 
-Release JSC-1.5 notes:
+Release JSC-1.6 notes:
 
-* Incorporated changes in DataRescue's TVision L release.  Compatability
-  with IDA 4.9.
+* Implemented system-level cut-and-paste between the TVision clipboard
+  and the X server clipboard.  Cutting and pasting between TVision
+  applications and other X applications now works.
+
+* Implemented a new screen update algorithm that tries to reduce unecessary
+  drawing commands sent to the X server.  Should improve performance over
+  slow links.
+
+* Incorporated changes in DataRescue's TVision M release.  Compatability
+  with IDA 5.1 and Mac OS X.
 
 Installation
 -----------------------------------------------------------
@@ -25,11 +33,22 @@ the source/ directory, where <your-sdk-dir> is a relative or absolute path
 to the unpacked SDK.  Don't forget the trailing slash.
 
 When the build process has completed, you will find two shared libraries in
-in the 'bin' directory of your IDA SDK distribution:  A 'libtvision.so' file
-(xterm mode library) and a 'libtvisionx.so' file (native X11 library).  To use
-the native X11 library copy it to your IDA application directory and rename it
-to 'libtvision.so'.  To switch back to using xterm mode just do the same with
-the built 'libtvision.so'.
+in the 'bin' directory of your IDA SDK distribution, depending on your
+operating system:
+
+        xterm mode library     Native X11 library
+
+Linux   libtvision.so          libtvisionx.so
+Darwin  libtvision.dylib       libtvisionx.dylib
+
+To use the native X11 library copy it to your IDA application directory and
+rename it to
+
+Linux   libtvision.so
+Darwin  libtvision.dylib
+
+To switch back to using xterm mode just do the same with the built xterm mode
+library.
 
 TVision requires an IBM-compatible PC X server font (commonly called a 'VGA'
 font around the web).  There are several freely available high-quality fonts
@@ -48,11 +67,11 @@ run 'mkfontdir' and restart your X server.
 Running
 -----------------------------------------------------------
 
-To use the library, simply run IDA as you normally would (for linux this
-is the 'idal' binary).  Since the X11 version of the library makes IDA a native
-X11 application, your 'DISPLAY' environment variable must be set to a valid
-X server specification.  (This happens automatically if you invoke IDA from
-within an existing XTerm).
+To use the library, simply run IDA as you normally would (for Linux and Darwin
+this is the 'idal' binary).  Since the X11 version of the library makes IDA a
+native X11 application, your 'DISPLAY' environment variable must be set to a
+valid X server specification.  (This happens automatically if you invoke IDA
+from within an existing XTerm).
 
 This X port of TVision obeys the X11 resource specification as closely as
 possible.  It will obey the following resource settings (settable in your

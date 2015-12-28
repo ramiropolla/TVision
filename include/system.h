@@ -230,7 +230,7 @@ inline Boolean TMouse::present()
 #pragma pack(push, 1)
 struct CharScanType
 {
-#ifdef __MACOSX__
+#ifdef __ppc__
     uchar scanCode;
     uchar charCode;
 #else
@@ -319,7 +319,7 @@ public:
 
     friend class TView;
     friend void genRefs();
-#ifndef __LINUX__
+#ifndef __UNIX__
     friend unsigned long getTicks(void);
 #endif
     friend class TProgram;
@@ -436,7 +436,7 @@ public:
 
     TScreen();
     ~TScreen();
-#ifdef __LINUX__
+#ifdef __UNIX__
     /**
      * Returns the first available event.
      */
@@ -468,7 +468,7 @@ public:
      * method.
      */
     static void suspend();
-#ifdef __LINUX__
+#ifdef __UNIX__
     /**
      * Shows or hides the cursor.
      *
@@ -674,5 +674,15 @@ public:
 };
 
 #endif // __NT__
+
+#ifdef __X11__
+class TThreads {
+public:
+#define MAX_GET_FROM_CLIP	(200*133)  // maximum size for insert in editdialog's
+  static char *clipboard_get(size_t &sz, bool line);
+  static bool clipboard_put(const char *str, size_t from, size_t to);
+};
+#endif
+
 #endif // Uses_TThreaded
 

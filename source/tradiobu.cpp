@@ -30,12 +30,12 @@ Boolean TRadioButtons::mark( int item )
 
 void TRadioButtons::press( int item )
 {
-    value = item;
+    value = (ushort)item;
 }
 
 void TRadioButtons::movedTo( int item )
 {
-    value = item;
+    value = (ushort)item;
 }
 
 void TRadioButtons::setData( void * rec )

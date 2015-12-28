@@ -30,7 +30,7 @@ Boolean TCheckBoxes::mark(int item)
 
 void TCheckBoxes::press(int item)
 {
-    value = value^(1 << item);
+    value = ushort(value^(1 << item));
 }
 
 #ifndef NO_TV_STREAMS

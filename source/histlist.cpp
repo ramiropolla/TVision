@@ -61,7 +61,7 @@ void *HistRec::operator new( size_t )
 
 inline HistRec::HistRec( uchar nId, const char *nStr ) :
     id( nId ),
-    len( strlen( nStr ) + 5 )
+    len( ushort(strlen( nStr ) + 5) )
 {
     strcpy( str, nStr );
 }
@@ -127,9 +127,13 @@ static void deleteString()
     lastRec = backup( lastRec, len );
 }
 
+#ifdef _MSC_VER
+#pragma warning(disable:4291)   // no placement delete
+#endif
+
 static void insertString( uchar id, const char *str )
 {
-    ushort len = strlen( str ) + 5;
+    ushort len = ushort(strlen( str ) + 5);
 #ifdef TV_HIST_ADD_AT_END
     while( len > historySize - ( (char *)lastRec - (char *)historyBlock ) )
         {

@@ -60,7 +60,7 @@ void TFrame::draw()
     cFrame = getColor(cFrame);
     cTitle = getColor(cTitle);
 
-    width = size.x;
+    width = ushort(size.x);
     l = width - 10;
 
     if( ( ((TWindow *)owner)->flags & (wfClose | wfZoom) ) != 0 )
@@ -83,7 +83,7 @@ void TFrame::draw()
         const char *title = ((TWindow *)owner)->getTitle(l);
         if( title != 0 )
             {
-            l = qmin( cstrlen(title), width - 10 );
+            l = (ushort)qmin( cstrlen(title), width - 10 );
             l = qmax( l, 0 );
             i = (width - l) >> 1;
             b.putChar( i-1, ' ' );
@@ -107,17 +107,17 @@ void TFrame::draw()
             }
         }
 
-    writeLine( 0, 0, size.x, 1, b );
+    writeLine( 0, 0, ushort(size.x), 1, b );
     for( i = 1; i <=  size.y - 2; i++ )
         {
-        frameLine( b, i, f +  3, cFrame );
-        writeLine( 0, i, size.x, 1, b );
+        frameLine( b, i, ushort(f +  3), (uchar)cFrame );
+        writeLine( 0, i, ushort(size.x), 1, b );
         }
-    frameLine( b, size.y - 1, f +  6, cFrame );
+    frameLine( b, ushort(size.y - 1), ushort(f +  6), (uchar)cFrame );
     if( (state & sfActive) != 0 )
         if( ( ((TWindow *)owner)->flags & wfGrow ) != 0 )
             b.moveCStr( width-2, dragIcon, cFrame );
-    writeLine( 0, size.y - 1, size.x, 1, b );
+    writeLine( 0, ushort(size.y - 1), ushort(size.x), 1, b );
 }
 
 TPalette& TFrame::getPalette() const

@@ -58,12 +58,12 @@ void TLabel::draw()
         scOff = 4;
         }
 
-    b.moveChar( 0, ' ', color, size.x );
+    b.moveChar( 0, ' ', color, ushort(size.x) );
     if( text != 0 )
         b.moveCStr( 1, text, color );
     if( showMarkers )
         b.putChar( 0, specialChars[scOff] );
-    writeLine( 0, 0, size.x, 1, b );
+    writeLine( 0, 0, ushort(size.x), 1, b );
 }
 
 TPalette& TLabel::getPalette() const

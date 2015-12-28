@@ -78,14 +78,14 @@ void TV_CDECL TView::resetCursor() {
         if (state & sfCursorIns)
           TThreads::crInfo.dwSize = 99;         // big cursor
         else
-          TThreads::crInfo.dwSize = 10;         // small cursor
+          TThreads::crInfo.dwSize = 15;         // small cursor
         if ( TThreads::my_console )
         {
           SetConsoleCursorInfo(TThreads::chandle[cnOutput],&TThreads::crInfo);
-          COORD coord = { cur.x, cur.y };
+          COORD coord = { SHORT(cur.x), SHORT(cur.y) };
           SetConsoleCursorPosition(TThreads::chandle[cnOutput],coord);
         }
-#elif defined(__LINUX__)
+#elif defined(__UNIX__)
         // no way to change cursor size?!
         TScreen::moveCursor(cur.x, cur.y);
         TScreen::drawCursor(1);
@@ -135,7 +135,7 @@ void TV_CDECL TView::resetCursor() {
     TThreads::crInfo.dwSize = 1;
     if ( TThreads::my_console )
       SetConsoleCursorInfo( TThreads::chandle[cnOutput], &TThreads::crInfo );
-#elif defined(__LINUX__)
+#elif defined(__UNIX__)
     TScreen::drawCursor(0);
 #else
 #error Unknown platform!

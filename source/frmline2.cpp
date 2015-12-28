@@ -57,10 +57,10 @@ void TV_CDECL TFrame::frameLine( TDrawBuffer& frameBuf, short y, short n, uchar 
       else if (y==p->origin.y+p->size.y) { mask1=0x0A; mask2=0x03;}
       else if (y<p->origin.y+p->size.y) { mask1=0; mask2=0x05;}
       else continue;
-      unsigned short xMin=p->origin.x;
-      unsigned short xMax=p->origin.x+p->size.x;
+      unsigned short xMin = ushort(p->origin.x);
+      unsigned short xMax = ushort(p->origin.x+p->size.x);
       if (xMin<1) xMin=1;
-      if (xMax>size.x-1) xMax=size.x-1;
+      if (xMax>size.x-1) xMax = ushort(size.x-1);
       if (xMax>xMin) {
         if (mask1==0) {
           frameMask[xMin-1] |= mask2;
@@ -77,7 +77,7 @@ void TV_CDECL TFrame::frameLine( TDrawBuffer& frameBuf, short y, short n, uchar 
   } // while
 //  unsigned char* src=frameMask;
   unsigned short* dest=frameBuf.data;
-  i=size.x;
+  i = ushort(size.x);
   short int i1=0;
   while (i--) {
     *dest++= ( ((unsigned short)color) << 8 ) + (unsigned char) frameChars[frameMask[i1]];

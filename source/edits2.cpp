@@ -36,7 +36,7 @@ void TV_CDECL TEditor::formatLine( void *DrawBuf, size_t LinePtr,
   if (p >= curPtr)
   {
     p += gapLen;
-  
+
     while ((p < bufSize) && (buffer[p] != 0x0D) && (i <= Width))
     {
       curColor = ((p-gapLen)>=selStart && (p-gapLen)<selEnd)
@@ -94,8 +94,8 @@ size_t TV_CDECL TEditor::lineEnd( size_t p )
 
         if (curPtr == bufLen)
             return bufLen;
- 
- 
+
+
     }
     else
     {
@@ -110,7 +110,7 @@ size_t TV_CDECL TEditor::lineEnd( size_t p )
             p++;
 
     return p;
- 
+
 }
 
 size_t TV_CDECL TEditor::lineStart( size_t p )
@@ -154,7 +154,7 @@ size_t TV_CDECL TEditor::nextChar( size_t p )
     if (p == bufLen)   return p;
     if (++p == bufLen) return p;
 
-    int t = (p >= curPtr) ? p + gapLen : p;
+    size_t t = (p >= curPtr) ? p + gapLen : p;
 
     return ((buffer [t-1] == 0x0D) && (buffer [t] == 0x0A)) ? p + 1 : p;
 }
@@ -164,7 +164,7 @@ size_t TV_CDECL TEditor::prevChar( size_t p )
     if (p == 0)   return p;
     if (--p == 0) return p;
 
-    int t = (p >= curPtr) ? p + gapLen : p;
+    size_t t = (p >= curPtr) ? p + gapLen : p;
 
     return ((buffer [t-1] == 0x0D) && (buffer [t] == 0x0A)) ? p - 1 : p;
 }

@@ -84,7 +84,7 @@ void TDirListBox::showDrives( TDirCollection *dirs )
           dirs->insert( new TDirEntry( s, oldc ) );
         }
         if ( c == getdisk() + 'A' )
-          cur = dirs->getCount();
+          cur = ushort(dirs->getCount());
         oldc[0] = c;
       }
     }
@@ -135,7 +135,7 @@ void TDirListBox::showDirs( TDirCollection *dirs )
         indent += indentSize;
         }
 
-    cur = dirs->getCount() - 1;
+    cur = ushort(dirs->getCount() - 1);
 
     end = strrchr( dir, DIRCHAR );
     char path[MAXPATH];

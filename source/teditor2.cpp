@@ -47,8 +47,8 @@ size_t scan( const void *block, size_t size, const char *str )
   const long   q        = 33554393L;
   const long   q32      = q<<5;
 
-  int   testLength      = size;
-  int   patternLength   = strlen(str);
+  size_t testLength      = size;
+  size_t patternLength   = strlen(str);
   if( testLength < patternLength || patternLength == 0 ) return UINT_MAX;
 
   long  patternHash     = 0;
@@ -57,7 +57,7 @@ size_t scan( const void *block, size_t size, const char *str )
   register const char*  testP= (const char*)block;
   register const char*  patP = str;
   register long   x = 1;
-  int             i = patternLength-1;
+  size_t          i = patternLength-1;
   while(i--) x =  (x<<5)%q;
 
   for (i=0; i<patternLength; i++) {
@@ -88,8 +88,8 @@ size_t iScan( const void *block, size_t size, const char *str )
   const long   q        = 33554393L;
   const long   q32      = q<<5;
 
-  int   testLength      = size;
-  int   patternLength   = strlen(str);
+  size_t testLength      = size;
+  size_t patternLength   = strlen(str);
   if( testLength < patternLength || patternLength == 0 ) return UINT_MAX;
 
   long  patternHash     = 0;
@@ -98,7 +98,7 @@ size_t iScan( const void *block, size_t size, const char *str )
   register const char*  testP= (const char*)block;
   register const char*  patP = str;
   register long   x = 1;
-  int             i = patternLength-1;
+  size_t          i = patternLength-1;
   while(i--) x =  (x<<5)%q;
 
   for (i=0; i<patternLength; i++) {
@@ -159,16 +159,16 @@ Boolean TEditor::insertBuffer( char *p,
             if( selLen > insCount )
                 delLen = selLen - insCount;
 
-    long newSize = long(bufLen + delCount - selLen + delLen) + length;
+    size_t newSize = long(bufLen + delCount - selLen + delLen) + length;
 
-    if( (size_t)newSize > (bufLen + delCount) )
-        if( (size_t)newSize > (UINT_MAX-0x1F) || setBufSize(size_t(newSize)) == False )
+    if( newSize > (bufLen + delCount) )
+        if( newSize > (UINT_MAX-0x1F) || setBufSize(newSize) == False )
             {
             editorDialog( edOutOfMemory );
             return False;
             }
 
-    size_t selLines = countLines( &buffer[bufPtr(selStart)], selLen );
+    int selLines = (int)countLines( &buffer[bufPtr(selStart)], selLen );
     if( curPtr == selEnd )
         {
         if( allowUndo == True )
@@ -198,7 +198,7 @@ Boolean TEditor::insertBuffer( char *p,
                 length
                );
 
-    size_t lines = countLines( &buffer[curPtr], length );
+    int lines = (int)countLines( &buffer[curPtr], length );
     curPtr += length;
     curPos.y += lines;
     drawLine = curPos.y;

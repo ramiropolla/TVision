@@ -17,6 +17,10 @@
 #if defined( Uses_TObject ) && !defined( __TObject )
 #define __TObject
 
+#ifdef _MSC_VER
+#pragma warning(disable:4263 4264)  // hidden virtual functions
+#endif
+
 #if !defined( __STDDEF_H )
 #include <stddef.h>
 #endif  // __STDDEF_H

@@ -415,7 +415,7 @@ class TEvent;
 struct TMemoData
 {
     size_t length;
-    char buffer[INT_MAX];
+    char buffer[];
 };
 
 class TMemo : public TEditor

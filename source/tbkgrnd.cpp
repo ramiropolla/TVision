@@ -35,8 +35,8 @@ void TBackground::draw()
 {
     TDrawBuffer b;
 
-    b.moveChar( 0, pattern, getColor(0x01), size.x );
-    writeLine( 0, 0, size.x, size.y, b );
+    b.moveChar( 0, pattern, getColor(0x01), ushort(size.x) );
+    writeLine( 0, 0, ushort(size.x), ushort(size.y), b );
 }
 
 TPalette& TBackground::getPalette() const

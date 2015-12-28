@@ -111,7 +111,7 @@ void TSortedListBox::handleEvent(TEvent& event)
         curString[searchPos] = EOS;
         searchPos--;
         if( searchPos == -1 )
-          shiftState = (ushort)event.keyDown.controlKeyState;
+          shiftState = (uchar)event.keyDown.controlKeyState;
       }
       else if ( (event.keyDown.charScan.charCode == '.') )
       {
@@ -125,7 +125,7 @@ void TSortedListBox::handleEvent(TEvent& event)
       {
         searchPos++;
         if ( searchPos == 0 )
-          shiftState = (ushort) event.keyDown.controlKeyState;
+          shiftState = (uchar) event.keyDown.controlKeyState;
         curString[searchPos] = event.keyDown.charScan.charCode;
         curString[searchPos+1] = EOS;
       }
@@ -139,10 +139,10 @@ void TSortedListBox::handleEvent(TEvent& event)
           if( value != oldValue )
           {
             focusItem(value);
-            setCursor( cursor.x+searchPos, cursor.y );
+            setCursor( ushort(cursor.x+searchPos), ushort(cursor.y) );
           }
           else
-            setCursor(cursor.x+(searchPos-oldPos), cursor.y );
+            setCursor(ushort(cursor.x+(searchPos-oldPos)), ushort(cursor.y) );
         }
         else
           searchPos = oldPos;
@@ -211,16 +211,16 @@ void TFileInfoPane::draw()
     fexpand( path, sizeof(path) );
 
     color = getColor(0x01);
-    b.moveChar( 0, ' ', color, size.x );
+    b.moveChar( 0, ' ', color, ushort(size.x) );
     if ( (int)strlen(path)+3 > size.x ) {
       b.moveStr( 3, path+(strlen(path)-size.x+4), color );
       b.moveStr( 1, "..", color );
     } else {
       b.moveStr( 1, path, color );
     }
-    writeLine( 0, 0, size.x, 1, b );
+    writeLine( 0, 0, ushort(size.x), 1, b );
 
-    b.moveChar( 0, ' ', color, size.x );
+    b.moveChar( 0, ' ', color, ushort(size.x) );
     pfn   = file_block.name;  // unification
 #ifdef __NT__
     if(getLongName) { // w95 & NT4 don't have this function
@@ -242,10 +242,10 @@ void TFileInfoPane::draw()
       pfn += fpos-size.x+4;
       fpos = 3;
     }
-    b.moveStr( fpos, pfn, color );
-    writeLine( 0, 1, size.x, 1, b);
+    b.moveStr( ushort(fpos), pfn, color );
+    writeLine( 0, 1, ushort(size.x), 1, b);
 
-    b.moveChar( 0, ' ', color, size.x );
+    b.moveChar( 0, ' ', color, short(size.x) );
     if( *(file_block.name) != EOS )
         {
         char buf[10];
@@ -279,9 +279,9 @@ void TFileInfoPane::draw()
         b.moveStr( 39, PM ? pmText : amText, color );
         }
 
-    writeLine(0, 2, size.x, 1, b );
-    b.moveChar( 0, ' ', color, size.x );
-    writeLine( 0, 3, size.x, size.y-2, b);
+    writeLine(0, 2, ushort(size.x), 1, b );
+    b.moveChar( 0, ' ', color, ushort(size.x) );
+    writeLine( 0, 3, ushort(size.x), ushort(size.y-2), b);
 }
 
 TPalette& TFileInfoPane::getPalette() const

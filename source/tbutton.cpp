@@ -33,7 +33,7 @@ TButton::TButton( const TRect& bounds,
     TView( bounds ),
     title( newStr( aTitle ) ),
     command( aCommand ),
-    flags( aFlags ),
+    flags( uchar(aFlags) ),
     amDefault( Boolean( (aFlags & bfDefault) != 0 ) )
 {
     options |= ofSelectable | ofFirstClick | ofPreProcess | ofPostProcess;
@@ -68,7 +68,7 @@ void TButton::drawTitle( TDrawBuffer &b,
         if( l < 1 )
             l = 1;
         }
-    b.moveCStr( i+l, title, cButton );
+    b.moveCStr( ushort(i+l), title, cButton );
 
     if( showMarkers == True && !down )
         {
@@ -79,7 +79,7 @@ void TButton::drawTitle( TDrawBuffer &b,
         else
             scOff = 4;
         b.putChar( 0, specialChars[scOff] );
-        b.putChar( s, specialChars[scOff+1] );
+        b.putChar( ushort(s), specialChars[scOff+1] );
         }
 }
 
@@ -107,7 +107,7 @@ void TButton::drawState(Boolean down)
 
     for( int y = 0; y <= size.y-2; y++ )
         {
-        b.moveChar( 0, ' ', cButton, size.x );
+        b.moveChar( 0, ' ', cButton, ushort(size.x) );
         b.putAttribute( 0, cShadow );
         if( down )
             {
@@ -116,13 +116,13 @@ void TButton::drawState(Boolean down)
             }
         else
             {
-            b.putAttribute( s, cShadow );
+            b.putAttribute( ushort(s), cShadow );
             if( showMarkers == False )
                 {
                 if( y == 0 )
-                    b.putChar( s, shadows[0] );
+                    b.putChar( ushort(s), shadows[0] );
                 else
-                    b.putChar( s, shadows[1] );
+                    b.putChar( ushort(s), shadows[1] );
                 ch = shadows[2];
                 }
             i =  1;
@@ -134,13 +134,13 @@ void TButton::drawState(Boolean down)
         if( showMarkers && !down )
             {
             b.putChar( 1, markers[0] );
-            b.putChar( s-1, markers[1] );
+            b.putChar( ushort(s-1), markers[1] );
             }
-        writeLine( 0, y, size.x, 1, b );
+        writeLine( 0, ushort(y), ushort(size.x), 1, b );
         }
     b.moveChar( 0, ' ', cShadow, 2 );
-    b.moveChar( 2, ch, cShadow, s-1 );
-    writeLine( 0, size.y-1, size.x, 1, b );
+    b.moveChar( 2, ch, cShadow, ushort(s-1) );
+    writeLine( 0, ushort(size.y-1), ushort(size.x), 1, b );
 }
 
 TPalette& TButton::getPalette() const
@@ -246,7 +246,7 @@ void TButton::makeDefault( Boolean enable )
         {
         message( owner,
                  evBroadcast,
-                 (enable == True) ? cmGrabDefault : cmReleaseDefault,
+                 ushort((enable == True) ? cmGrabDefault : cmReleaseDefault),
                  this
                );
         amDefault = enable;

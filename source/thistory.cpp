@@ -49,7 +49,7 @@ void THistory::draw()
     TDrawBuffer b;
 
     b.moveCStr( 0, icon, getColor(0x0102) );
-    writeLine( 0, 0, size.x, size.y, b );
+    writeLine( 0, 0, ushort(size.x), ushort(size.y), b );
 }
 
 TPalette& THistory::getPalette() const
@@ -73,7 +73,7 @@ void THistory::handleEvent( TEvent& event )
       )
         {
         link->select();
-        historyAdd( historyId, link->data );
+        historyAdd( (uchar)historyId, link->data );
         r = link->getBounds();
         r.a.x--;
         r.b.x++;
@@ -104,7 +104,7 @@ void THistory::handleEvent( TEvent& event )
                  event.message.infoPtr ==  link) ||
                 event.message.command ==  cmRecordHistory
               )
-                historyAdd( historyId, link->data );
+                historyAdd( (uchar)historyId, link->data );
 }
 
 THistoryWindow *THistory::initHistoryWindow( const TRect& bounds )

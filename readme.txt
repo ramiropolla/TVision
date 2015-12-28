@@ -1,8 +1,8 @@
 
-TVision by Borland ported to OS/2, MS Windows, DOS32, Linux
------------------------------------------------------------
+TVision by Borland ported to OS/2, MS Windows, DOS32, Linux, Mac OS X
+---------------------------------------------------------------------
 
-                                                Version Level L
+                                                Version Level M
 
 This port is partially based on the port of TVision to FreeBSD made by
 Sergio Sigala.
@@ -21,10 +21,9 @@ obsolete stuff. The code is supposed to run on:
         Linux
         DOS32
         OS/2
+        Mac OS X
 
-I tested it on MS Windows (32 and 64) and Linux machines.
-
-This version (level L) removes dependency on IDA libraries.
+I tested it on MS Windows (32 and 64), Linux, and Mac OS X machines
 
 If you find any problems with the code, feel free to report them or even
 better, to fix the found bugs :)

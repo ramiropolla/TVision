@@ -53,7 +53,7 @@ unsigned char TEventQueue::shiftState;
 
 ushort TEventQueue::eventCount = 0;
 Boolean TEventQueue::mouseEvents = False;
-#ifndef __LINUX__
+#ifndef __UNIX__
 Boolean TEventQueue::mouseReverse = False;
 ushort TEventQueue::doubleDelay = 8;
 #endif
@@ -94,7 +94,7 @@ void TEventQueue::resume()
     mouse.registerHandler( 0xFFFF, (void (*)(void))mouseInt );
     mouseEvents = True;
     mouse.show();
-    TMouse::setRange( TScreen::screenWidth-1, TScreen::screenHeight-1 );
+    TMouse::setRange( ushort(TScreen::screenWidth-1), ushort(TScreen::screenHeight-1) );
 }
 
 void TEventQueue::suspend()
@@ -119,7 +119,7 @@ TEventQueue::~TEventQueue()
 #endif
 }
 
-#if !defined(__LINUX__)
+#if !defined(__UNIX__)
 void TEventQueue::getMouseEvent( TEvent& ev )
 {
     if( mouseEvents == True )
@@ -176,19 +176,19 @@ void TEventQueue::getMouseState( TEvent & ev )
 #ifdef __NT__
   ev.mouse.where   = lastMouse.where;
   ev.mouse.buttons = lastMouse.buttons;
-  if ( lastMouse.buttons != 0 ) ev.what = getTicks();  // Temporarily save tick count when event was read.
+  if ( lastMouse.buttons != 0 ) ev.what = ushort(getTicks());  // Temporarily save tick count when event was read.
 
   INPUT_RECORD *irp = TThreads::get_next_event();
   if ( irp == NULL || irp->EventType != MOUSE_EVENT ) return;
   TThreads::accept_event();
   curMouse.where.x = irp->Event.MouseEvent.dwMousePosition.X;
   curMouse.where.y = irp->Event.MouseEvent.dwMousePosition.Y;
-  curMouse.buttons = irp->Event.MouseEvent.dwButtonState;
+  curMouse.buttons = uchar(irp->Event.MouseEvent.dwButtonState);
   curMouse.eventFlags = 0;
   if ( (irp->Event.MouseEvent.dwEventFlags & DOUBLE_CLICK) != 0 )
     curMouse.eventFlags |= meDoubleClick;
   ev.mouse = curMouse;
-  if ( lastMouse.buttons == 0 ) ev.what = getTicks();
+  if ( lastMouse.buttons == 0 ) ev.what = ushort(getTicks());
 #elif defined(__OS2__)
     assert(! DosRequestMutexSem(TThreads::hmtxMouse1,SEM_INDEFINITE_WAIT) );
     if( eventCount == 0 )
@@ -214,7 +214,7 @@ void TEventQueue::getMouseState( TEvent & ev )
     if( mouseReverse != False && ev.mouse.buttons != 0 && ev.mouse.buttons != 3 )
         ev.mouse.buttons ^= 3;
 }
-#endif // if !defined(__LINUX__)
+#endif // if !defined(__UNIX__)
 
 //---------------------------------------------------------------------
 //---------------------------------------------------------------------
@@ -662,7 +662,7 @@ void TEvent::_getKeyEvent()
   INPUT_RECORD *irp = TThreads::get_next_event();
   if ( irp == NULL || irp->EventType != KEY_EVENT ) return;
   TThreads::accept_event();
-      keyDown.charScan.scanCode = irp->Event.KeyEvent.wVirtualScanCode;
+      keyDown.charScan.scanCode = uchar(irp->Event.KeyEvent.wVirtualScanCode);
       keyDown.charScan.charCode = irp->Event.KeyEvent.uChar.AsciiChar;
 
       what = evKeyDown;
@@ -672,7 +672,7 @@ void TEvent::_getKeyEvent()
 
   // Convert NT style virtual key codes to Tvision keycodes
 
-  uchar vk = irp->Event.KeyEvent.wVirtualKeyCode;
+  uchar vk = (uchar)irp->Event.KeyEvent.wVirtualKeyCode;
   ushort tk;
        if ( shift & kbCtrlShift ) tk = translate_vkey(ctrl_trans, vk);
   else if ( shift & kbAltShift  ) tk = translate_vkey(alt_trans, vk);
@@ -690,7 +690,7 @@ macro_handler_t macro_handler;
 void TEvent::getKeyEvent()
 {
 #define mh macro_handler
-  ushort key = mh.MacroGetNextKey != NULL ? mh.MacroGetNextKey() : 0;
+  ushort key = ushort(mh.MacroGetNextKey != NULL ? mh.MacroGetNextKey() : 0);
   if ( key != 0 )
   {
     what = evKeyDown;

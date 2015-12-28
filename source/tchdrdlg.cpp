@@ -113,7 +113,7 @@ void TChDirDialog::handleEvent( TEvent& event )
                     return;
                 }
             dirList->newDirectory( curDir );
-            int len = strlen( curDir );
+            int len = (int)strlen( curDir );
             if( len > 3 && curDir[len-1] == DIRCHAR )
                 curDir[len-1] = EOS;
             qstrncpy( dirInput->data, curDir, dirInput->dataSize() );
@@ -139,7 +139,7 @@ void TChDirDialog::setUpDialog()
         dirList->newDirectory( curDir );
         if( dirInput != 0 )
             {
-            int len = strlen( curDir );
+            int len = (int)strlen( curDir );
             if( len > 3 && curDir[len-1] == DIRCHAR )
                 curDir[len-1] = EOS;
             qstrncpy( dirInput->data, curDir, dirInput->dataSize() );

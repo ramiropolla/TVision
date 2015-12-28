@@ -196,5 +196,5 @@ int main(int argc,char *argv[])
   return 0;
 }
 
-char *ActionKey(const char *) { return ""; }
+void ActionKey(const char *, char *buf, size_t size ) { buf[0] = '\0'; }
 idaman char *ida_export ivalue1(int) { return ""; }

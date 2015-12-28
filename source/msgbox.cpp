@@ -80,17 +80,17 @@ ushort messageBoxRect( const TRect &r, const char *msg, ushort aOptions )
             {
             buttonList[buttonCount] =
                 new TButton( TRect(0, 0, 10, 2), buttonName[i], commands[i], bfNormal );
-            x += buttonList[buttonCount++]->size.x + 2;
+            x = ushort(x + buttonList[buttonCount++]->size.x + 2);
             }
         }
 
-    x = (dialog->size.x - x) / 2;
+    x = ushort((dialog->size.x - x) / 2);
 
     for( i = 0; i < buttonCount; i++ )
         {
         dialog->insert(buttonList[i]);
-        buttonList[i]->moveTo(x, dialog->size.y - 3);
-        x += buttonList[i]->size.x + 2;
+        buttonList[i]->moveTo(x, ushort(dialog->size.y - 3));
+        x = ushort(x + buttonList[i]->size.x + 2);
         }
 
     dialog->selectNext(False);
@@ -144,7 +144,7 @@ ushort messageBox( ushort aOptions, const char *fmt, ... )
 
 ushort inputBox( const char *Title, const char *aLabel, char *s, int limit )
 {
-    ushort len = qmax( strlen(aLabel) + 9 + limit, strlen(Title) + 11 );
+    ushort len = (ushort)qmax( strlen(aLabel) + 9 + limit, strlen(Title) + 11 );
     len = qmin( len, 60 );
     len = qmax( len , 24 );
     TRect r(0, 0, len, 8);
@@ -166,12 +166,12 @@ ushort inputBoxRect( const TRect &bounds,
 
     dialog = new TDialog(bounds, Title);
 
-    int x = 4 + strlen( aLabel );
+    int x = 4 + (int)strlen( aLabel );
     r = TRect( x, 2, qmin(x + limit + 2, dialog->size.x - 3), 3 );
     control = new TInputLine( r, limit );
     dialog->insert( control );
 
-    r = TRect(2, 2, 3 + strlen(aLabel), 3);
+    r = TRect(2, 2, 3 + (int)strlen(aLabel), 3);
     dialog->insert( new TLabel( r, aLabel, control ) );
 
     r = TRect( dialog->size.x / 2 - 11, dialog->size.y - 4,

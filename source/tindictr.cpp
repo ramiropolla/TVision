@@ -45,22 +45,22 @@ void TIndicator::draw()
 
     if( (state & sfDragging) == 0 )
         {
-        color = getColor(1);
+        color = (uchar)getColor(1);
         frame = dragFrame;
         }
     else
         {
-        color = getColor(2);
+        color = (uchar)getColor(2);
         frame = normalFrame;
         }
 
-    b.moveChar( 0, frame, color, size.x );
+    b.moveChar( 0, frame, color, ushort(size.x) );
     if( modified )
         b.putChar( 0, 15 );
 
     qsnprintf(s, sizeof(s), " %d:%d ", location.y+1, location.x+1);
-    b.moveCStr( 8-(strchr(s, ':')-s), s, color);
-    writeBuf(0, 0, size.x, 1, b);
+    b.moveCStr( ushort(8-(strchr(s, ':')-s)), s, color);
+    writeBuf(0, 0, ushort(size.x), 1, b);
 }
 
 TPalette& TIndicator::getPalette() const

@@ -121,7 +121,7 @@ void TGroup::draw()
             }
         }
     if( buffer != 0 )
-        writeBuf( 0, 0, size.x, size.y, buffer );
+        writeBuf( 0, 0, ushort(size.x), ushort(size.y), buffer );
     else
         {
         clip = getClipRect();
